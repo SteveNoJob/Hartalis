@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* The Cool Blue/Purple Background (For Landing & Dashboard) */
+@keyframes gradientWave {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-bg {
+  background: linear-gradient(-45deg, #000000, #1a1a2e, #16213e, #0f3460, #4a00e0);
+  background-size: 400% 400%;
+  animation: gradientWave 15s ease infinite;
+}
+
+
+@keyframes gradientWaveWarm {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-bg-warm {
+  background: linear-gradient(-45deg, #1a0505, #4a0e17, #8e1a22, #d94a26, #e0105c);
+  background-size: 400% 400%;
+  animation: gradientWaveWarm 15s ease infinite;
+}
