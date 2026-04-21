@@ -10,14 +10,6 @@ from passlib.context import CryptContext
 router = APIRouter()
 security = HTTPBearer()
 
-# Fake DB (temporary)
-users = {
-    "admin": {
-        "username": "admin",
-        "password": "1234"
-    }
-}
-
 # Fake token generator
 def create_token(username: str):
     return f"token-{username}"
