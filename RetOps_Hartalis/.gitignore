@@ -27,6 +27,3 @@ __pycache__/
 # Database (auto-created)
 *.db
 
-# OS files
-.DS_Store
-Thumbs.db
