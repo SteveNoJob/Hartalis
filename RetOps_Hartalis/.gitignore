@@ -16,8 +16,17 @@ build/
 Thumbs.db
 
 # Ignore all __pycache__ directories recursively
-**/__pycache__/
+__pycache__/
+*.db
+.venv/
 
 # Also ignore individual compiled files
 *.py[cod]
 *$py.class
+
+# Database (auto-created)
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db

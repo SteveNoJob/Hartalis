@@ -45,3 +45,12 @@ class ChatRequest(BaseModel):
     message: str
     conversation_history: List[dict]    # full history for context
     data_context: str        
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    remember_me: bool = False

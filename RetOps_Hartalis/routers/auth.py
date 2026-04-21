@@ -1,6 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from models.schemas import RegisterRequest, LoginRequest
+from sqlalchemy.orm import Session
+from database.connection import get_db
+from models.user import User
+from passlib.context import CryptContext
 
 router = APIRouter()
 security = HTTPBearer()
@@ -13,48 +18,61 @@ users = {
     }
 }
 
-class UserAuth(BaseModel):
-    username: str
-    password: str
-
 # Fake token generator
 def create_token(username: str):
     return f"token-{username}"
 
 def verify_token(token: str):
+    if not token:
+        return None
     if token.startswith("token-"):
         return token.split("-")[1]
     return None
 
-@router.post("/login")
-def login(user: UserAuth):
-    db_user = users.get(user.username)
+pwd_context = CryptContext(schemes=["bcrypt"])
 
-    if not db_user or db_user["password"] != user.password:
+def hash_password(password: str):
+    return pwd_context.hash(password[:72])
+
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain[:72], hashed)
+
+@router.post("/login")
+def login(data: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == data.username).first()
+
+    if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = create_token(user.username)
-
-    return {"access_token": token}
+    return {
+        "message": "Login success",
+        "remember_me": data.remember_me
+    }
 
 @router.post("/register")
-def register(user: UserAuth):
-    if user.username in users:
-        raise HTTPException(status_code=400, detail="User already exists")
-    
-    users[user.username] = {
-        "username": user.username,
-        "password": user.password
-    }
-    
-    return {"message": "User registered"}
+def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.username == data.username).first()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
+    if existing:
+        raise HTTPException(status_code=400, detail="User exists")
+
+    new_user = User(
+        username=data.username,
+        password=hash_password(data.password)
+    )
+
+    db.add(new_user)
+    db.commit()
+
+    return {"message": "User created"}
+
+def get_current_user(request: Request):
+    token = request.cookies.get("access_token")
+
     username = verify_token(token)
 
     if not username:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     return username
 
