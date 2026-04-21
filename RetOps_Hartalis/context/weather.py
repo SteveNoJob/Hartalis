@@ -1,144 +1,252 @@
-# context/weather.py
+# context/holiday_trend.py
 """
-Fetches weather forecast and converts it into retail demand context.
+Computes monthly retail sales lift.
 
-Weather affects Malaysian retail in ways the calendar can't capture:
-  - Heavy rain → fewer walk-ins, but spikes in rice/instant noodles/cooking oil
-  - Heatwaves → cold beverage, ice cream, bottled water spikes
-  - Haze → bottled water + masks spike, general foot traffic drops
+Priority order:
+  1. User-uploaded sales history (most accurate — reflects this specific store)
+  2. DOSM IOWRT national baseline (fallback for new users with <3 months data)
 
-Uses OpenWeatherMap forecast API (requires WEATHER_API_KEY in .env).
+This file does NOT call Z.AI. It produces numbers and a plain English string
+that context_builder.py injects into the GLM prompt.
 """
 
-import httpx
-import os
-from dotenv import load_dotenv
-from collections import Counter
-from typing import Optional
-
-load_dotenv()
-WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
-
-OPENWEATHER_URL = "https://api.openweathermap.org/data/2.5/forecast"
-
-# Thresholds tuned for Malaysian climate
-HEAVY_RAIN_MM = 20.0      # single 3-hour interval — counts as heavy
-WET_DAY_MM = 15.0         # total over forecast window — counts as a wet period
-HOT_TEMP_C = 34.0         # sustained max temp above this = heatwave
-# OpenWeather thunderstorm weather codes (2xx)
-STORM_WEATHER_IDS = {200, 201, 202, 210, 211, 212, 221, 230, 231, 232}
+from pathlib import Path
+from typing import Optional, Dict
+import pandas as pd
+from functools import lru_cache
 
 
-async def _fetch_forecast(city: str) -> Optional[dict]:
-    """Call OpenWeatherMap for ~48 hours of 3-hour forecast intervals."""
-    if not WEATHER_API_KEY:
-        return None
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-    params = {
-        "q": f"{city},MY",
-        "appid": WEATHER_API_KEY,
-        "units": "metric",
-        "cnt": 16,  # 16 intervals * 3 hours = 48 hours
-    }
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(OPENWEATHER_URL, params=params)
-            response.raise_for_status()
-            return response.json()
-    except Exception:
-        return None
+# Baseline months = "normal" months with no major Malaysian festivals.
+# April, June, July, September have no major public holidays driving spikes.
+BASELINE_MONTHS = [4, 6, 7, 9]
 
+# Minimum months of user data required before we trust their CSV over DOSM.
+# Below this, we fall back to the national baseline.
+MIN_USER_MONTHS_REQUIRED = 3
 
-def _interpret_forecast(data: dict) -> str:
-    """Turn raw forecast data into retail-relevant insight."""
-    forecasts = data.get("list", [])
-    if not forecasts:
-        return ""
+# Path to the fallback DOSM CSV (bundled with the repo).
+DOSM_CSV_PATH = Path(__file__).parent / "data" / "iowrt_3d.csv"
 
-    # Gather signals across the whole window — don't just pick 'dominant'
-    total_precip = 0.0
-    max_precip_single = 0.0
-    max_temp = float("-inf")
-    weather_ids = []
-    weather_mains = []
+# Category-specific lift during major festivals (expressed as multipliers, not %).
+# Example: 0.65 means +65% vs baseline during Hari Raya for cooking oil.
+# These are kept hardcoded because they are editorial judgments about product-level
+# behavior, not something that can be reliably derived from aggregate DOSM data.
+FESTIVE_CATEGORY_LIFT = {
+    "Hari Raya": {
+        "cooking oil":        0.65,
+        "sugar":              0.70,
+        "flour":              0.55,
+        "condensed milk":     0.60,
+        "biscuits":           0.80,
+        "beverages":          0.45,
+        "cooking essentials": 0.60,
+    },
+    "Chinese New Year": {
+        "snacks":             0.75,
+        "beverages":          0.55,
+        "mandarin oranges":   2.10,
+        "cookies":            1.20,
+        "cooking essentials": 0.40,
+    },
+    "Deepavali": {
+        "sweets":             0.90,
+        "snacks":             0.50,
+        "beverages":          0.35,
+        "cooking essentials": 0.30,
+    },
+}
 
-    for f in forecasts:
-        rain_mm = f.get("rain", {}).get("3h", 0) or 0
-        snow_mm = f.get("snow", {}).get("3h", 0) or 0
-        precip = rain_mm + snow_mm
-        total_precip += precip
-        max_precip_single = max(max_precip_single, precip)
-
-        main = f.get("main", {})
-        temp_max = main.get("temp_max", main.get("temp", 0))
-        max_temp = max(max_temp, temp_max)
-
-        weather = f.get("weather", [{}])[0]
-        weather_ids.append(weather.get("id", 0))
-        weather_mains.append(weather.get("main", "Unknown"))
-
-    insights = []
-
-    # 1. Thunderstorms — highest retail impact
-    storm_count = sum(1 for wid in weather_ids if wid in STORM_WEATHER_IDS)
-    if storm_count >= 2:
-        insights.append(
-            f"Thunderstorms expected ({storm_count} intervals in next 48h). "
-            "Foot traffic will drop sharply. Expect panic-buy spikes on rice, "
-            "instant noodles, canned goods, bottled water."
-        )
-    # 2. Heavy rainfall
-    elif max_precip_single >= HEAVY_RAIN_MM:
-        insights.append(
-            f"Heavy rainfall forecast (peak ~{max_precip_single:.0f}mm in 3h). "
-            "Walk-in traffic will drop. Flood-prep items may spike: "
-            "rice, cooking oil, instant noodles."
-        )
-    elif total_precip >= WET_DAY_MM:
-        insights.append(
-            f"Wet period ahead (~{total_precip:.0f}mm total over 48h). "
-            "Modest traffic reduction expected; comfort items (instant noodles, "
-            "hot drinks, biscuits) may see mild lift."
-        )
-
-    # 3. Heat
-    if max_temp >= HOT_TEMP_C:
-        insights.append(
-            f"Hot period forecast (peak {max_temp:.1f}°C). "
-            "Cold beverages, ice cream, bottled water, and ice demand will rise."
-        )
-
-    # 4. Haze / smoke / persistent mist
-    haze_count = sum(1 for m in weather_mains if m in ("Haze", "Smoke", "Dust", "Mist"))
-    if haze_count >= 3:
-        insights.append(
-            "Persistent haze conditions. Expect higher demand for bottled water, "
-            "face masks, and indoor comfort items; reduced outdoor foot traffic."
-        )
-
-    # 5. Normal weather fallback
-    if not insights:
-        dominant = Counter(weather_mains).most_common(1)[0][0]
-        insights.append(
-            f"Normal weather ({dominant.lower()}, peak {max_temp:.1f}°C, "
-            f"{total_precip:.0f}mm rainfall). No weather-driven demand shift expected."
-        )
-
-    return " ".join(insights)
+MONTH_NAMES = {
+    1: "January", 2: "February", 3: "March", 4: "April",
+    5: "May", 6: "June", 7: "July", 8: "August",
+    9: "September", 10: "October", 11: "November", 12: "December",
+}
 
 
-async def get_weather_context(city: str = "Kuala Lumpur") -> str:
+# ---------------------------------------------------------------------------
+# Core lift computation
+# ---------------------------------------------------------------------------
+
+def _compute_lift_from_dataframe(
+    df: pd.DataFrame,
+    date_col: str = "date",
+    sales_col: str = "sales",
+) -> Dict[int, float]:
     """
-    Main function context_builder.py calls.
-    Returns plain English weather context, or empty string on failure.
+    Given a dataframe with date + sales columns, return {month: lift_percent}.
+
+    Lift is measured against the average of BASELINE_MONTHS.
+    """
+    if date_col not in df.columns or sales_col not in df.columns:
+        raise ValueError(
+            f"CSV must have '{date_col}' and '{sales_col}' columns. "
+            f"Got: {list(df.columns)}"
+        )
+
+    df = df.copy()
+    df[date_col] = pd.to_datetime(df[date_col])
+    df["month"] = df[date_col].dt.month
+
+    monthly_avg = df.groupby("month")[sales_col].mean()
+
+    # If we don't have at least one baseline month, we can't compute lift.
+    available_baseline = [m for m in BASELINE_MONTHS if m in monthly_avg.index]
+    if not available_baseline:
+        raise ValueError(
+            "Cannot compute lift: no baseline months (Apr, Jun, Jul, Sep) "
+            "present in the data."
+        )
+
+    baseline = monthly_avg[available_baseline].mean()
+    if baseline == 0:
+        raise ValueError("Baseline sales is zero — cannot compute lift.")
+
+    lift = ((monthly_avg - baseline) / baseline * 100).round(2)
+    return lift.to_dict()
+
+
+# DOSM retail group codes (MSIC 2008 classification).
+# User's store type maps to one or more of these groups.
+# Reference: https://storage.dosm.gov.my/technotes/iowrt.pdf
+DOSM_RETAIL_GROUPS = {
+    "grocery":      [471, 472],  # Supermarkets, mini-marts, food/beverage stores
+    "convenience":  [471, 472],  # Same as grocery — convenience stores fit here
+    "electronics":  [474],        # Electronics, audio/video
+    "clothing":     [477],        # Apparel, footwear, leather
+    "household":    [475],        # Hardware, paint, furniture
+    "pharmacy":     [477],        # Pharma/medical/cosmetic (MSIC 4772)
+    "automotive":   [453],        # Motor vehicle parts
+    "fuel":         [473],        # Fuel stations
+    "all":          None,         # Use entire dataset (least useful)
+}
+
+DEFAULT_STORE_TYPE = "grocery"
+
+
+@lru_cache(maxsize=8)
+def _load_dosm_baseline(store_type: str = DEFAULT_STORE_TYPE) -> Dict[int, float]:
+    """
+    Load DOSM national retail lift filtered to the user's store type.
+    Cached per store_type so repeated calls are free.
+
+    IMPORTANT: Filtering by store type matters. Averaging across ALL retail
+    categories (electronics + clothing + groceries + fuel) washes out any
+    festive signal because the categories move in different directions.
+    """
+    if not DOSM_CSV_PATH.exists():
+        return {m: 0.0 for m in range(1, 13)}
+
+    try:
+        df = pd.read_csv(DOSM_CSV_PATH)
+        if "series" in df.columns:
+            df = df[df["series"] == "abs"]
+
+        groups = DOSM_RETAIL_GROUPS.get(store_type.lower(), DOSM_RETAIL_GROUPS[DEFAULT_STORE_TYPE])
+        if groups and "group" in df.columns:
+            df = df[df["group"].isin(groups)]
+
+        if df.empty:
+            return {m: 0.0 for m in range(1, 13)}
+
+        return _compute_lift_from_dataframe(df)
+    except Exception:
+        return {m: 0.0 for m in range(1, 13)}
+
+
+def get_monthly_lift_table(
+    user_csv_path: Optional[str] = None,
+    store_type: str = DEFAULT_STORE_TYPE,
+) -> Dict[int, float]:
+    """
+    Main entry point for computing monthly lift.
+
+    Returns a dict: {1: 5.2, 2: 18.7, ...} mapping month → lift percent.
+
+    Priority:
+      1. User's own sales CSV (most accurate for this specific store)
+      2. DOSM national baseline filtered by store_type (fallback)
+
+    Args:
+        user_csv_path: Optional path to user's uploaded sales CSV.
+        store_type: One of DOSM_RETAIL_GROUPS keys (e.g., 'grocery',
+                    'electronics', 'clothing'). Ignored if user CSV is used.
+    """
+    # Try user CSV first
+    if user_csv_path:
+        try:
+            df = pd.read_csv(user_csv_path)
+            df["date"] = pd.to_datetime(df["date"])
+            unique_months = df["date"].dt.to_period("M").nunique()
+            if unique_months >= MIN_USER_MONTHS_REQUIRED:
+                return _compute_lift_from_dataframe(df)
+        except Exception:
+            pass
+
+    return _load_dosm_baseline(store_type)
+
+
+# ---------------------------------------------------------------------------
+# Category-level lift (editorial / hardcoded)
+# ---------------------------------------------------------------------------
+
+def get_festive_category_lift(festival: str, category: str) -> float:
+    """
+    Returns expected sales multiplier for a product category during a festival.
+    Example: get_festive_category_lift("Hari Raya", "cooking oil") → 0.65
+    """
+    festival_data = FESTIVE_CATEGORY_LIFT.get(festival, {})
+    return festival_data.get(category.lower(), 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Prompt context builder
+# ---------------------------------------------------------------------------
+
+def build_trend_context_string(
+    month: int,
+    user_csv_path: Optional[str] = None,
+    store_type: str = DEFAULT_STORE_TYPE,
+) -> str:
+    """
+    Returns a plain English string about the current month's retail trend,
+    ready to inject into the GLM prompt.
+
+    This is the function context_builder.py calls.
     """
     try:
-        data = await _fetch_forecast(city)
-        if not data:
-            return ""
-        insight = _interpret_forecast(data)
-        if not insight:
-            return ""
-        return f"WEATHER FORECAST ({city}, next 48h): {insight}"
+        lift_table = get_monthly_lift_table(user_csv_path, store_type)
+        lift = lift_table.get(month, 0.0)
+        month_name = MONTH_NAMES.get(month, f"Month {month}")
+
+        if user_csv_path:
+            source_note = "based on your store's sales history"
+        else:
+            source_note = f"based on Malaysian {store_type} retail trends (DOSM)"
+
+        if lift > 15:
+            return (
+                f"RETAIL TREND: {month_name} is historically a high-demand month "
+                f"(~{lift:.1f}% above baseline, {source_note}). "
+                f"This is a peak season — prioritise stocking up early."
+            )
+        elif lift > 5:
+            return (
+                f"RETAIL TREND: {month_name} sees moderate above-average activity "
+                f"(~{lift:.1f}% above baseline, {source_note})."
+            )
+        elif lift < -5:
+            return (
+                f"RETAIL TREND: {month_name} is typically a slower month "
+                f"(~{abs(lift):.1f}% below baseline, {source_note}). "
+                f"Consider reducing reorder quantities to avoid deadstock."
+            )
+        else:
+            return (
+                f"RETAIL TREND: {month_name} is a baseline month with normal demand."
+            )
     except Exception:
-        return ""
+        return ""  # Never crash the pipeline
