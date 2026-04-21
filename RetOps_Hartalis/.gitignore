@@ -1,0 +1,23 @@
+# Dependency directories
+node_modules/
+venv/
+.env
+
+# Build outputs
+dist/
+build/
+*.exe
+*.log
+
+# IDE/System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Ignore all __pycache__ directories recursively
+**/__pycache__/
+
+# Also ignore individual compiled files
+*.py[cod]
+*$py.class
