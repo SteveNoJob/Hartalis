@@ -8,3 +8,6 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     username = Column(String)
     password = Column(String)
+
+    gender = Column(String, default="Prefer not to say")
+    region = Column(String, default="Unknown")

@@ -1,11 +1,11 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../context/AuthContext";
 
 export default function AuthenticatedDashboard() {
 
-  const { user, loading } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
 
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -37,8 +37,6 @@ export default function AuthenticatedDashboard() {
     }
   };
 
-  const { refreshUser } = useAuth();
-
   const handleLogout = async () => {
     try {
       await fetch("http://localhost:8000/auth/logout", {
@@ -54,15 +52,19 @@ export default function AuthenticatedDashboard() {
   };
 
   const taskOptions = ['Demand Prediction', 'Inventory Optimization'];
-  
-  if (!user) {
-    navigate('/');
-    return null;
-  }
 
   if (loading) {
     return <p className="text-white text-center mt-10">Loading...</p>;
   }
+
+  if (!user) {
+    return <p className="text-white text-center mt-10">Redirecting...</p>;
+  }
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/');
+    }
+  }, [user, loading, navigate]);
 
   return (
     <>

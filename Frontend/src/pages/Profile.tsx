@@ -1,39 +1,96 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../context/AuthContext";
 
 export default function ProfileSettings() {
-
-    const { user, loading } = useAuth();
-
+    const { user, loading, refreshUser } = useAuth();
     const navigate = useNavigate();
+
+    if (!user) {
+        navigate('/');
+        return null;
+    }
 
     // Fake states to simulate saving data
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
     // User Data States
-    const [fullName, setFullName] = useState('Chenxuan');
+    // const [fullName, setFullName] = useState('Chenxuan');
+    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [message, setMessage] = useState('');
     const [gender, setGender] = useState('Prefer not to say');
     const [region, setRegion] = useState('Kuala Lumpur');
-    const [email] = useState('cxuan@hackathon.com'); // Usually read-only in basic settings
+    // const [email] = useState('cxuan@hackathon.com'); // Usually read-only in basic settings
 
-    const handleSave = (e: React.FormEvent) => {
+    useEffect(() => {
+    if (user) {
+        setEmail(user.email);
+        setUsername(user.username);
+    }
+    }, [user]);
+
+    // const handleSave = (e: React.FormEvent) => { // Remove this in the future
+    //     e.preventDefault();
+    //     setIsSaving(true);
+
+    //     // Fake network delay for the judges
+    //     setTimeout(() => {
+    //         setIsSaving(false);
+    //         setShowSuccess(true);
+
+    //         // Hide success message after 3 seconds
+    //         setTimeout(() => {
+    //             setShowSuccess(false);
+    //         }, 3000);
+    //     }, 1500);
+    // };
+
+    const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSaving(true);
 
-        // Fake network delay for the judges
-        setTimeout(() => {
-            setIsSaving(false);
-            setShowSuccess(true);
+        try {
+            const res = await fetch("http://localhost:8000/auth/profile", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+                username,
+                password: password || undefined,
+                gender,
+                region,
+            }),
+            });
 
-            // Hide success message after 3 seconds
-            setTimeout(() => {
-                setShowSuccess(false);
-            }, 3000);
-        }, 1500);
-    };
+            const data = await res.json();
+
+            if (!res.ok) {
+                setMessage(data.detail || "Update failed");
+                return;
+            }
+
+            setMessage("Profile updated!");
+
+            // refresh global user state
+            await refreshUser();
+
+            // optional: clear password field
+            setPassword('');
+
+        } catch (err) {
+            console.error(err);
+            setMessage("Something went wrong");
+        }
+        };
+
+    if (loading) {
+        return <p className="text-white text-center mt-10">Loading...</p>;
+    }
 
     return (
         <div className="min-h-screen animate-bg flex flex-col text-white font-sans pb-12 relative">
@@ -80,21 +137,21 @@ export default function ProfileSettings() {
                             </div>
                         </div>
                         <div className="text-center md:text-left">
-                            <h2 className="text-2xl font-bold text-white">{fullName}</h2>
+                            <h2 className="text-2xl font-bold text-white">{user ? user.username: "?"}</h2>
                             <p className="text-blue-400">{region} • {gender}</p>
                         </div>
                     </div>
 
                     {/* Form Area */}
-                    <form onSubmit={handleSave} className="p-8 space-y-6">
+                    <form onSubmit={handleUpdate} className="p-8 space-y-6">
 
                         {/* Full Name (Full Width Row) */}
                         <div className="mb-6">
                             <label className="block text-sm font-medium text-gray-400 mb-2">Full Name</label>
                             <input
                                 type="text"
-                                value={user?.username || ""}
-                                onChange={(e) => setFullName(e.target.value)}
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                             />
                         </div>

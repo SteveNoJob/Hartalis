@@ -1,6 +1,5 @@
 #input/output data shapes
 from pydantic import BaseModel, EmailStr
-
 from typing import Optional, List
 
 class ForecastRequest(BaseModel):
@@ -56,3 +55,9 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
     remember_me: bool = False
+
+class UpdateProfileRequest(BaseModel):
+    username: str
+    password: Optional[str] = None
+    gender: Optional[str] = None
+    region: Optional[str] = None

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -15,38 +16,44 @@ export default function LoginPage() {
   };
 
   const [password, setPassword] = useState('');
+
+  const { refreshUser } = useAuth();
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  try {
-    const res = await fetch("http://localhost:8000/auth/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include", // 🔥 VERY IMPORTANT (for cookies)
-      body: JSON.stringify({
-        email: email, // backend expects username
-        password: password,
-        remember_me: true // For now default to true, CHANGE THIS PLS
-      }),
-    });
+    try {
+      const res = await fetch("http://localhost:8000/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // 🔥 VERY IMPORTANT (for cookies)
+        body: JSON.stringify({
+          email: email, // backend expects username
+          password: password,
+          remember_me: true // For now default to true, CHANGE THIS PLS
+        }),
+      });
 
-    if (!res.ok) {
-      throw new Error("Login failed");
+      if (!res.ok) {
+        throw new Error("Login failed");
+      }
+
+      const data = await res.json();
+      console.log(data);
+
+      // IMPORTANT: sync auth state
+      
+      await refreshUser();
+
+      // now navigate
+      navigate("/dashboard");
+
+    } catch (err) {
+      console.error(err);
+      alert("Login failed");
     }
-
-    const data = await res.json();
-    console.log(data);
-
-    // redirect after login
-    navigate("/dashboard");
-
-  } catch (err) {
-    console.error(err);
-    alert("Login failed");
-  }
-};
+  };
 
   return (
     <div className="min-h-screen animate-bg flex items-center justify-center text-white font-sans px-4">

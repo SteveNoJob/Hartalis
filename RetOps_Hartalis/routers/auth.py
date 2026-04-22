@@ -6,20 +6,14 @@ from models.schemas import RegisterRequest, LoginRequest
 from sqlalchemy.orm import Session
 from database.connection import get_db
 from models.user import User
-from passlib.context import CryptContext
 
 from services.auth_service import verify_token
 
+from models.schemas import UpdateProfileRequest
+from services.auth_service import hash_password, verify_password
+
 router = APIRouter()
 security = HTTPBearer()
-
-pwd_context = CryptContext(schemes=["bcrypt"])
-
-def hash_password(password: str):
-    return pwd_context.hash(password[:72])
-
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain[:72], hashed)
 
 @router.post("/login")
 def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
@@ -89,13 +83,33 @@ def logout(response: Response):
     return {"message": "Logged out"}
 
 @router.get("/me")
-def get_me(user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_email).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+def get_me(current_user: User = Depends(get_current_user)):
     return {
-        "email": user.email,
-        "username": user.username
-    }   
+        "email": current_user.email,
+        "username": current_user.username,
+        "gender": current_user.gender,
+        "region": current_user.region
+    }
+    
+@router.put("/profile")
+def update_profile(
+    data: UpdateProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if data.username:
+        current_user.username = data.username
+
+    if data.gender:
+        current_user.gender = data.gender
+
+    if data.region:
+        current_user.region = data.region
+
+    if data.password:
+        current_user.password = hash_password(data.password)
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {"message": "Profile updated"}
