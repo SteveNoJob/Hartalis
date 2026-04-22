@@ -14,6 +14,40 @@ export default function LoginPage() {
     setShowReset(false);
   };
 
+  const [password, setPassword] = useState('');
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+
+  try {
+    const res = await fetch("http://localhost:8000/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // 🔥 VERY IMPORTANT (for cookies)
+      body: JSON.stringify({
+        username: email, // backend expects username
+        password: password,
+        remember_me: true
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Login failed");
+    }
+
+    const data = await res.json();
+    console.log(data);
+
+    // redirect after login
+    navigate("/dashboard");
+
+  } catch (err) {
+    console.error(err);
+    alert("Login failed");
+  }
+};
+
   return (
     <div className="min-h-screen animate-bg flex items-center justify-center text-white font-sans px-4">
       
@@ -42,7 +76,7 @@ export default function LoginPage() {
                 Sign in to continue optimizing your data
               </p>
 
-              <form className="space-y-5">
+              <form onSubmit={handleLogin} className="space-y-5">
 
                 {/* Email */}
                 <div>
@@ -64,6 +98,8 @@ export default function LoginPage() {
                   <div className="relative mt-1">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
                       className="w-full px-4 py-3 pr-12 bg-white/5 border border-white/10 rounded-lg 
                       focus:outline-none focus:ring-2 focus:ring-blue-500/40 
