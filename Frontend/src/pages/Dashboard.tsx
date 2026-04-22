@@ -43,7 +43,7 @@ export default function AuthenticatedDashboard() {
     <>
       <div className="min-h-screen animate-bg flex flex-col text-white font-sans">
         
-        {/* FIXED HEIGHT HEADER: h-24 and px-6 instead of p-6 */}
+        {/* FIXED HEIGHT HEADER */}
         <header className="h-24 flex justify-between items-center px-6 w-full relative z-50">
           <div className="font-bold text-xl tracking-wider cursor-pointer flex items-center gap-2" onClick={() => navigate('/dashboard')}>
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -136,11 +136,13 @@ export default function AuthenticatedDashboard() {
               )}
             </div>
 
-            <button className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full transition-all shadow-lg hover:shadow-blue-500/25 mr-1 shrink-0">
+            {/* This button navigates to the /chat page */}
+            <button onClick={() => navigate('/chats')} className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full transition-all shadow-lg hover:shadow-blue-500/25 mr-1 shrink-0">
               <svg className="w-6 h-6 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
             </button>
           </div>
 
+          {/* Optional Toggles Area */}
           <div className="w-full max-w-3xl flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
             {mainTask === 'Demand Prediction' && (
               <button

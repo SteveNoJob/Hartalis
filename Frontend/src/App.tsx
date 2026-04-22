@@ -7,6 +7,7 @@ import UsageSettings from './pages/Usage';
 import ProfileSettings from './pages/Profile';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
+import ChatInterface from './pages/Chat';
 
 export default function App() {
   return (
@@ -18,7 +19,8 @@ export default function App() {
         <Route path="/usage" element={<UsageSettings />} />
         <Route path="/profile" element={<ProfileSettings />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/register" element={<RegisterPage />} />          <Route path="/chats" element={<ChatInterface />} /> 
+
       </Routes>
     </Router>
   );
