@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from services.auth_service import create_access_token
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from models.schemas import RegisterRequest, LoginRequest
@@ -7,19 +8,10 @@ from database.connection import get_db
 from models.user import User
 from passlib.context import CryptContext
 
+from services.auth_service import verify_token
+
 router = APIRouter()
 security = HTTPBearer()
-
-# Fake token generator
-def create_token(username: str):
-    return f"token-{username}"
-
-def verify_token(token: str):
-    if not token:
-        return None
-    if token.startswith("token-"):
-        return token.split("-")[1]
-    return None
 
 pwd_context = CryptContext(schemes=["bcrypt"])
 
@@ -30,16 +22,30 @@ def verify_password(plain, hashed):
     return pwd_context.verify(plain[:72], hashed)
 
 @router.post("/login")
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
 
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return {
-        "message": "Login success",
-        "remember_me": data.remember_me
-    }
+    # remember_me controls expiry
+    expire_minutes = 60 * 24 * 7 if data.remember_me else 60
+
+    token = create_access_token(
+        data={"sub": user.username},
+        expires_minutes=expire_minutes
+    )
+
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        max_age=expire_minutes * 60,
+        secure=False,   # set True in production (HTTPS)
+        samesite="lax"
+    )
+
+    return {"message": "Login successful"}
 
 @router.post("/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
@@ -58,17 +64,25 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
     return {"message": "User created"}
 
+    
 def get_current_user(request: Request):
     token = request.cookies.get("access_token")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     username = verify_token(token)
 
     if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     return username
-
 
 @router.get("/profile")
 def profile(user: str = Depends(get_current_user)):
     return {"message": f"Hello {user}"}
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie("access_token")
+    return {"message": "Logged out"}
