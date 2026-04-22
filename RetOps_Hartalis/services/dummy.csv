@@ -1,0 +1,21 @@
+Transaction_Date,Item Name,Qty,Unit Price,Total_Sales,Type,Store_ID,Discount,Notes
+2024-01-01,Apple iPhone 13,2,3500,7000,actual,S001,0,ok
+2024-01-02,Samsung S22,1,3200,3200,actual,S001,0,
+2024/01/03,Apple iPhone 13,three,3500,10500,actual,S002,10%,wrong qty type
+2024-01-04,Google Pixel 7,-2,2800,-5600,actual,S002,0,negative units
+2024-01-05,Xiaomi 12,,2200,4400,actual,S003,0,missing units
+not_a_date,Oppo Find X5,1,2500,2500,actual,S001,0,bad date
+2024-01-07,Vivo V27,5,-200,1000,actual,S002,0,negative price
+2024-01-08,Apple iPhone 13,1000,3500,3500000,actual,S001,0,outlier
+2024-01-09,Samsung S22,2,,6400,actual,S003,0,missing price
+2024-01-10,,3,2000,6000,actual,S001,0,missing product
+2024-01-11,Google Pixel 7,2,2800,5600,growth_yoy,S002,0,should be filtered
+2024-01-12,Xiaomi 12,1,2200,2200,growth_mom,S003,0,should be filtered
+2024-01-13,Oppo Find X5,1,2500,2500,absolute,S001,0,alt abs label
+2024-01-14,Vivo V27,2,abc,5000,actual,S002,0,price string
+2024-01-15,Apple iPhone 13,2,3500,7000,ACTUAL,S001,0,case variation
+2024-01-15,Apple iPhone 13,2,3500,7000,ACTUAL,S001,0,duplicate row
+2024-01-16,Nokia 3310,1,100,100,actual,S004,0,old product
+2024-01-17,Huawei P50,0,3000,0,actual,S002,0,zero units
+2024-01-18,Sony Xperia,1,NaN,2000,actual,S003,0,NaN price
+2024-01-19,Realme GT,1,2300,,actual,S001,0,missing revenue
