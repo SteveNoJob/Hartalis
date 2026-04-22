@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -17,7 +16,6 @@ export default function LoginPage() {
 
   const [password, setPassword] = useState('');
 
-  const { refreshUser } = useAuth();
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -27,7 +25,7 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // 🔥 VERY IMPORTANT (for cookies)
+        credentials: "include", // VERY IMPORTANT (for cookies)
         body: JSON.stringify({
           email: email, // backend expects username
           password: password,
@@ -41,10 +39,6 @@ export default function LoginPage() {
 
       const data = await res.json();
       console.log(data);
-
-      // IMPORTANT: sync auth state
-      
-      await refreshUser();
 
       // now navigate
       navigate("/dashboard");

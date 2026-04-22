@@ -10,7 +10,7 @@ from models.user import User
 from services.auth_service import verify_token
 
 from models.schemas import UpdateProfileRequest
-from services.auth_service import hash_password, verify_password
+from services.auth_service import hash_password, verify_password, get_user_from_token
 
 router = APIRouter()
 security = HTTPBearer()
@@ -60,21 +60,34 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     return {"message": "User created"}
 
     
-def get_current_user(request: Request):
+# def get_current_user(request: Request):
+#     token = request.cookies.get("access_token")
+
+#     if not token:
+#         raise HTTPException(status_code=401, detail="Not authenticated")
+
+#     email = verify_token(token)
+
+#     if not email:
+#         raise HTTPException(status_code=401, detail="Invalid token")
+
+#     return email
+
+def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
 
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    email = verify_token(token)
+    user = get_user_from_token(token, db)
 
-    if not email:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user")
 
-    return email
+    return user
 
 @router.get("/profile")
-def profile(user: str = Depends(get_current_user)):
+def profile(user: User = Depends(get_current_user)):
     return {"message": f"Hello {user}"}
 
 @router.post("/logout")
@@ -82,6 +95,10 @@ def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Logged out"}
 
+# @router.get("/me")
+# def get_me(current_user: User = Depends(get_current_user)):
+#     return current_user
+    
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
     return {

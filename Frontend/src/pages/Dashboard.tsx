@@ -53,18 +53,20 @@ export default function AuthenticatedDashboard() {
 
   const taskOptions = ['Demand Prediction', 'Inventory Optimization'];
 
-  if (loading) {
-    return <p className="text-white text-center mt-10">Loading...</p>;
-  }
+  console.log(user?.email)
 
-  if (!user) {
-    return <p className="text-white text-center mt-10">Redirecting...</p>;
-  }
-  useEffect(() => {
-    if (!loading && !user) {
-      navigate('/');
-    }
-  }, [user, loading, navigate]);
+  // if (loading) {
+  //   return <p className="text-white text-center mt-10">Loading...</p>;
+  // }
+
+  // if (!user) {
+  //   return <p className="text-white text-center mt-10">Redirecting...</p>;
+  // }
+  // useEffect(() => {
+  //   if (!loading && !user) {
+  //     navigate('/');
+  //   }
+  // }, [user, loading, navigate]);
 
   return (
     <>

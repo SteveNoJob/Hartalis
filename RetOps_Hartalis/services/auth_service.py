@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 from passlib.context import CryptContext
+from models.user import User
+from sqlalchemy.orm import Session
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -28,3 +30,15 @@ def hash_password(password: str):
 
 def verify_password(plain, hashed):
     return pwd_context.verify(plain[:72], hashed)
+
+def get_user_from_token(token: str, db: Session):
+    try:
+        email = verify_token(token)
+        if not email:
+            return None
+
+        user = db.query(User).filter(User.email == email).first()
+        return user
+
+    except JWTError:
+        return None
