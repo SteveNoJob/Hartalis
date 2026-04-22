@@ -3,6 +3,7 @@ import asyncio
 from datetime import date
 from unittest.mock import patch, AsyncMock
 
+
 from context.calendar import (
     get_calendar_events,
     get_school_holiday_status,

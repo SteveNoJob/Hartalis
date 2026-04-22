@@ -1,19 +1,30 @@
 # context/context_builder.py
 """
-Orchestrates all context modules into a single string for the forecaster.
+Orchestrates all context modules into a single, size-bounded string.
 
-When a what-if scenario is provided, it is PREPENDED to the context
-so GLM sees it first and knows to adjust the recommendations that follow.
+Enforces input limits documented in context/limits.py (PRD §4.3.3).
+Scenario override is prepended and NEVER dropped (PRD §4.3.4 transparency).
 """
 
 from datetime import date
 from typing import List, Dict, Optional
+import logging
 
 from context.calendar import build_calendar_context_string
 from context.holiday_trend import build_trend_context_string
 from context.weather import get_weather_context
 from context.anomaly import build_anomaly_context_string
 from context.scenario import parse_scenario, build_scenario_context_string
+from context.limits import (
+    ContextSection,
+    enforce_section_limit,
+    validate_sales_history,
+    assemble_within_budget,
+    estimate_tokens,
+    MAX_CONTEXT_CHARS,
+)
+
+logger = logging.getLogger(__name__)
 
 
 async def build_full_context(
@@ -24,78 +35,110 @@ async def build_full_context(
     include_weather: bool = True,
     reference_date: Optional[date] = None,
     scenario_query: Optional[str] = None,
-) -> str:
+    return_report: bool = False,
+):
     """
-    Single function Feq/CS call to get all context as one injectable string.
-    Never crashes — each module fails gracefully.
+    Build the GLM-ready context string with enforced size limits.
 
     Args:
-        sales_history:      Recent daily sales for anomaly detection.
-                            Format: [{"date":..., "product_name":..., "units_sold":...}]
-        user_sales_csv_path: Path to user's uploaded long-term CSV for trend calc.
-                            Falls back to DOSM if missing.
-        store_type:         'grocery' | 'convenience' | 'electronics' | 'clothing' |
-                            'household' | 'pharmacy' | 'automotive' | 'fuel' | 'all'
-                            Used only when user CSV is absent.
-        city:               Malaysian city for weather forecast.
-        include_weather:    Set False to skip the weather API call (for tests).
-        reference_date:     Override 'today' for testing.
-        scenario_query:     Optional what-if query like "tomorrow is a holiday".
-                            When provided, scenario context is prepended and
-                            real weather fetch is skipped (scenario overrides it).
+        sales_history:       Daily sales rows. Trimmed if too long.
+        user_sales_csv_path: Path to user's long-term CSV for trend calc.
+        store_type:          'grocery' | 'clothing' | 'electronics' | etc.
+        city:                Malaysian city for weather.
+        include_weather:     False disables the weather API call.
+        reference_date:      Override 'today' (for testing).
+        scenario_query:      Optional what-if query.
+        return_report:       If True, returns (context_str, TruncationReport).
+                             Otherwise returns just the context string.
+
+    Never raises — each module fails gracefully.
     """
     today = reference_date or date.today()
-    sections = []
-
-    # 0. Scenario override (prepended — highest priority)
+    sections: List[ContextSection] = []
     scenario_overrides_weather = False
+
+    # Validate sales_history size up front (PRD §4.3.3 rejection path)
+    if sales_history is not None:
+        sales_history, warning = validate_sales_history(sales_history)
+        if warning:
+            logger.warning("build_full_context: %s", warning)
+
+    # 0. Scenario override (prepended; never dropped)
     if scenario_query:
         try:
             override = parse_scenario(scenario_query)
-            scenario_ctx = build_scenario_context_string(override)
-            if scenario_ctx:
-                sections.append(scenario_ctx)
-                # Only skip real weather fetch if the scenario specifies weather
+            raw = build_scenario_context_string(override)
+            if raw:
+                content, truncated = enforce_section_limit(raw)
+                sections.append(ContextSection(
+                    name="scenario", content=content, truncated=truncated,
+                ))
                 scenario_overrides_weather = override.force_weather is not None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception("scenario parsing failed: %s", e)
 
-    # 1. Calendar — always include
+    # 1. Calendar (includes Ramadan status)
     try:
-        calendar_ctx = build_calendar_context_string(reference_date=today)
-        if calendar_ctx:
-            sections.append(calendar_ctx)
-    except Exception:
-        pass
+        raw = build_calendar_context_string(reference_date=today)
+        if raw:
+            content, truncated = enforce_section_limit(raw)
+            sections.append(ContextSection(
+                name="calendar", content=content, truncated=truncated,
+            ))
+    except Exception as e:
+        logger.exception("calendar failed: %s", e)
 
-    # 2. Monthly trend
+    # 2. Monthly retail trend
     try:
-        trend_ctx = build_trend_context_string(
+        raw = build_trend_context_string(
             month=today.month,
             user_csv_path=user_sales_csv_path,
             store_type=store_type,
         )
-        if trend_ctx:
-            sections.append(trend_ctx)
-    except Exception:
-        pass
+        if raw:
+            content, truncated = enforce_section_limit(raw)
+            sections.append(ContextSection(
+                name="trend", content=content, truncated=truncated,
+            ))
+    except Exception as e:
+        logger.exception("trend failed: %s", e)
 
-    # 3. Weather — skip if scenario specifies weather (avoids contradicting context)
+    # 3. Weather (skipped if scenario overrides it)
     if include_weather and not scenario_overrides_weather:
         try:
-            weather_ctx = await get_weather_context(city)
-            if weather_ctx:
-                sections.append(weather_ctx)
-        except Exception:
-            pass
+            raw = await get_weather_context(city)
+            if raw:
+                content, truncated = enforce_section_limit(raw)
+                sections.append(ContextSection(
+                    name="weather", content=content, truncated=truncated,
+                ))
+        except Exception as e:
+            logger.exception("weather failed: %s", e)
 
-    # 4. Anomaly
+    # 4. Anomalies
     if sales_history:
         try:
-            anomaly_ctx = build_anomaly_context_string(sales_history)
-            if anomaly_ctx:
-                sections.append(anomaly_ctx)
-        except Exception:
-            pass
+            raw = build_anomaly_context_string(sales_history)
+            if raw:
+                content, truncated = enforce_section_limit(raw)
+                sections.append(ContextSection(
+                    name="anomaly", content=content, truncated=truncated,
+                ))
+        except Exception as e:
+            logger.exception("anomaly failed: %s", e)
 
-    return "\n\n".join(sections) if sections else ""
+    # Final assembly with size budget
+    final_str, report = assemble_within_budget(sections, MAX_CONTEXT_CHARS)
+
+    logger.info(
+        "context assembled: %d chars (~%d tokens), kept=%d, dropped=%s, truncated=%s",
+        report.final_size,
+        estimate_tokens(final_str),
+        len(sections) - len(report.dropped_sections),
+        report.dropped_sections or "none",
+        report.truncated_sections or "none",
+    )
+
+    if return_report:
+        return final_str, report
+    return final_str
