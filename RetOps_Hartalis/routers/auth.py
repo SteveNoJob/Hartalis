@@ -87,3 +87,15 @@ def profile(user: str = Depends(get_current_user)):
 def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Logged out"}
+
+@router.get("/me")
+def get_me(user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "email": user.email,
+        "username": user.username
+    }   

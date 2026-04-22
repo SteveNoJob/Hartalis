@@ -1,8 +1,12 @@
 'use client';
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from "../context/AuthContext";
 
 export default function AuthenticatedDashboard() {
+
+  const { user, loading } = useAuth();
+
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -33,6 +37,8 @@ export default function AuthenticatedDashboard() {
     }
   };
 
+  const { refreshUser } = useAuth();
+
   const handleLogout = async () => {
     try {
       await fetch("http://localhost:8000/auth/logout", {
@@ -40,7 +46,7 @@ export default function AuthenticatedDashboard() {
         credentials: "include", // 🔥 required so cookie is sent
       });
 
-      // after backend clears cookie
+      await refreshUser();
       navigate('/');
     } catch (err) {
       console.error("Logout failed", err);
@@ -48,6 +54,15 @@ export default function AuthenticatedDashboard() {
   };
 
   const taskOptions = ['Demand Prediction', 'Inventory Optimization'];
+  
+  if (!user) {
+    navigate('/');
+    return null;
+  }
+
+  if (loading) {
+    return <p className="text-white text-center mt-10">Loading...</p>;
+  }
 
   return (
     <>
@@ -67,14 +82,14 @@ export default function AuthenticatedDashboard() {
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
               className="flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 border-2 border-white/20 hover:border-white/60 transition-all shadow-lg"
             >
-              <span className="font-bold text-sm tracking-widest">CX</span>
+              <span className="font-bold text-sm tracking-widest">{user?.username ? user.username.slice(0, 2) : "Loading..."}</span>
             </button>
 
             {isProfileMenuOpen && (
               <div className="absolute right-0 mt-3 w-56 bg-[#0f172a]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col py-2 transition-all">
                 <div className="px-4 py-3 border-b border-white/10 mb-1 bg-white/5">
                   <p className="text-xs text-blue-400 font-medium mb-1">Signed in as</p>
-                  <p className="text-sm font-semibold truncate text-gray-200">cxuan@hackathon.com</p>
+                  <p className="text-sm font-semibold truncate text-gray-200">{user ? user.email: "Loading..."}</p>
                 </div>
                 <button onClick={() => { navigate('/profile'); setIsProfileMenuOpen(false); }} className="px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Profile</button>
                 <button onClick={() => { navigate('/usage'); setIsProfileMenuOpen(false); }} className="px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Usage Settings</button>
@@ -90,7 +105,7 @@ export default function AuthenticatedDashboard() {
         <main className="flex-grow flex flex-col items-center justify-center px-4 w-full max-w-5xl mx-auto -mt-10 relative z-10">
           
           <h1 className="text-4xl md:text-6xl font-extrabold mb-4 text-center tracking-tight">
-            Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Chenxuan</span>
+            Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">{user ? user.username : "Loading..."}</span>
           </h1>
           <p className="text-gray-400 text-lg md:text-xl mb-10 text-center font-light tracking-wide">
             Select your optimization model parameters below.

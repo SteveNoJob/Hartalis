@@ -1,8 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from "../context/AuthContext";
 
 export default function ProfileSettings() {
+
+    const { user, loading } = useAuth();
+
     const navigate = useNavigate();
 
     // Fake states to simulate saving data
@@ -89,7 +93,7 @@ export default function ProfileSettings() {
                             <label className="block text-sm font-medium text-gray-400 mb-2">Full Name</label>
                             <input
                                 type="text"
-                                value={fullName}
+                                value={user?.username || ""}
                                 onChange={(e) => setFullName(e.target.value)}
                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                             />
@@ -150,7 +154,7 @@ export default function ProfileSettings() {
                             <div className="relative">
                                 <input
                                     type="email"
-                                    value={email}
+                                    value={user?.email || ""}
                                     readOnly
                                     className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-gray-500 cursor-not-allowed"
                                 />
