@@ -5,3 +5,4 @@ sqlalchemy
 passlib
 bcrypt==4.0.1
 python-jose
+python-dotenv

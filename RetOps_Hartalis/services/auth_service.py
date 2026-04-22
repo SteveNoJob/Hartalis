@@ -1,7 +1,10 @@
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+import os
 
-SECRET_KEY = "your-secret-key"  # later move to .env
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 
 def create_access_token(data: dict, expires_minutes: int):
