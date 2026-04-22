@@ -23,7 +23,7 @@ def verify_password(plain, hashed):
 
 @router.post("/login")
 def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == data.username).first()
+    user = db.query(User).filter(User.email == data.email).first()
 
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -32,7 +32,7 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
     expire_minutes = 60 * 24 * 7 if data.remember_me else 60
 
     token = create_access_token(
-        data={"sub": user.username},
+        data={"sub": user.email},
         expires_minutes=expire_minutes
     )
 
@@ -55,6 +55,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="User exists")
 
     new_user = User(
+        email=data.email.lower(),
         username=data.username,
         password=hash_password(data.password)
     )
@@ -71,12 +72,12 @@ def get_current_user(request: Request):
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    username = verify_token(token)
+    email = verify_token(token)
 
-    if not username:
+    if not email:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    return username
+    return email
 
 @router.get("/profile")
 def profile(user: str = Depends(get_current_user)):

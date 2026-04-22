@@ -26,9 +26,9 @@ export default function LoginPage() {
       },
       credentials: "include", // 🔥 VERY IMPORTANT (for cookies)
       body: JSON.stringify({
-        username: email, // backend expects username
+        email: email, // backend expects username
         password: password,
-        remember_me: true
+        remember_me: true // For now default to true, CHANGE THIS PLS
       }),
     });
 
