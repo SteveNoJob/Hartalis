@@ -3,8 +3,54 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function RegisterPage() {
+
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+
+  const handleRegister = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  // basic validation
+  if (password !== confirmPassword) {
+    setError("Passwords do not match");
+    return;
+  }
+
+  try {
+    const res = await fetch("http://localhost:8000/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        username,
+        password,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.detail || "Registration failed");
+      return;
+    }
+
+    // success
+    alert("Account created!");
+    navigate('/'); // go to login
+
+  } catch (err) {
+    console.error(err);
+    setError("Something went wrong");
+  }
+};
 
   return (
     <div className="min-h-screen animate-bg flex items-center justify-center text-white font-sans px-4">
@@ -33,13 +79,15 @@ export default function RegisterPage() {
           </p>
 
           {/* Form */}
-          <form className="space-y-5">
+          <form onSubmit={handleRegister} className="space-y-5">
 
             {/* Name */}
             <div>
               <label className="text-sm text-gray-400">Full Name</label>
               <input
                 type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)} 
                 placeholder="King Boshua"
                 className="w-full mt-1 px-4 py-3 bg-white/5 border border-white/10 rounded-lg 
                 focus:outline-none focus:ring-2 focus:ring-blue-500/40 
@@ -52,6 +100,8 @@ export default function RegisterPage() {
               <label className="text-sm text-gray-400">Email</label>
               <input
                 type="email"
+                value={email}
+                onChange={(e)=>setEmail(e.target.value)}
                 placeholder="you@example.com"
                 className="w-full mt-1 px-4 py-3 bg-white/5 border border-white/10 rounded-lg 
                 focus:outline-none focus:ring-2 focus:ring-blue-500/40 
@@ -65,6 +115,8 @@ export default function RegisterPage() {
               <div className="relative mt-1">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="Create a password"
                   className="w-full px-4 py-3 pr-12 bg-white/5 border border-white/10 rounded-lg 
                   focus:outline-none focus:ring-2 focus:ring-blue-500/40 
@@ -86,12 +138,18 @@ export default function RegisterPage() {
               <label className="text-sm text-gray-400">Confirm Password</label>
               <input
                 type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm your password"
                 className="w-full mt-1 px-4 py-3 bg-white/5 border border-white/10 rounded-lg 
                 focus:outline-none focus:ring-2 focus:ring-blue-500/40 
                 focus:border-blue-500/40 transition text-white placeholder-gray-500"
               />
             </div>
+
+            {error && (
+              <p className="text-red-400 text-sm text-center">{error}</p>
+            )}
 
             {/* Submit */}
             <button

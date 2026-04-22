@@ -33,8 +33,18 @@ export default function AuthenticatedDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      await fetch("http://localhost:8000/auth/logout", {
+        method: "POST",
+        credentials: "include", // 🔥 required so cookie is sent
+      });
+
+      // after backend clears cookie
+      navigate('/');
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
   };
 
   const taskOptions = ['Demand Prediction', 'Inventory Optimization'];
