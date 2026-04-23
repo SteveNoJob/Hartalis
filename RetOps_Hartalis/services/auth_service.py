@@ -42,3 +42,6 @@ def get_user_from_token(token: str, db: Session):
 
     except JWTError:
         return None
+    
+
+    #uvicorn data:app --reload

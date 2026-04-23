@@ -1,4 +1,6 @@
 #input/output data shapes
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
@@ -61,3 +63,20 @@ class UpdateProfileRequest(BaseModel):
     password: Optional[str] = None
     gender: Optional[str] = None
     region: Optional[str] = None
+
+class TransactionCreate(BaseModel):
+    product_name: str
+    quantity: int
+    total_price: float
+
+class TransactionOut(BaseModel):
+    id: int
+    user_id: int
+    product_name: str
+    quantity: int
+    total_price: float
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

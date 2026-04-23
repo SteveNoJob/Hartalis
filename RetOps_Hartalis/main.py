@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from routers import auth
 from database.connection import engine
 from database.base import Base
-from models import user # import models so SQLAlchemy registers them
+from models import user, transaction  # import models so SQLAlchemy registers them
 
 from fastapi.middleware.cors import CORSMiddleware
 
