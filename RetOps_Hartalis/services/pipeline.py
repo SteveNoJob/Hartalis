@@ -1,54 +1,52 @@
 import asyncio
-from data_processor import process_data, format_for_ai
-from inventory_prompts import INVENTORY_SYSTEM_PROMPT, build_user_prompt
-from glm_client import call_glm
+import json
+from services.glm_client import glm_client
+from services.data_processor import DataProcessor
 
-async def run_pipeline(file_path: str, reorder_threshold: int = 5):
+SYSTEM_PROMPT = """
+You are an inventory optimization engine.
+Analyze each SKU and return ONLY a valid JSON array, no extra text.
+Each item must follow this schema exactly:{
+  "sku": "abs",
+  "status": "understock",
+  "reorder": true,
+  "reorder_qty": 100430,
+  "recommendations": [
+    "Consider negotiating bulk pricing given consistent high volume",
+    "Review supplier lead time — 7 days may cause stockout risk",
+    "Set reorder trigger at 80,000 units to avoid future understocking"
+  ]
+}
+"""
 
-    print("\n" + "=" * 60)
-    print("  SMARTSTOCK — AI INVENTORY PIPELINE")
-    print("=" * 60)
+class InventoryPipeline:
+    def __init__(self, batch_size: int = 20):
+        self.batch_size = batch_size
+        self.processor  = DataProcessor()
 
-    # ── Step 1: Process data ──────────────────────────────────────
-    print("\n[STEP 1] Processing data...")
-    df, summary, daily_totals = process_data(file_path, reorder_threshold=reorder_threshold)
+    async def run(self, summary_df=None) -> list[dict]:
+        if summary_df is None:
+            data       = await self.processor.load_all()
+            summary_df = self.processor.build_sku_summary(data)
 
-    # ── Step 2: Format for AI ─────────────────────────────────────
-    print("\n[STEP 2] Preparing AI prompt...")
-    ai_summary   = format_for_ai(summary)
-    date_range   = f"{df['date'].min().date()} → {df['date'].max().date()}"
-    total_revenue = f"RM {df['revenue'].sum():,.2f}"
+        records = self.processor.to_json_records(summary_df)
+        batches = [
+            records[i:i+self.batch_size]
+            for i in range(0, len(records), self.batch_size)
+        ]
 
-    user_prompt = build_user_prompt(ai_summary, date_range, total_revenue)
+        results = await asyncio.gather(*[self._analyze_batch(b) for b in batches])
+        return [item for batch in results for item in batch]
 
-    print("\n── Prompt Preview ──────────────────────────────────────")
-    print(user_prompt)
-    print("────────────────────────────────────────────────────────")
-
-    # ── Step 3: Call Z.AI ─────────────────────────────────────────
-    print("\n[STEP 3] Sending to Z.AI...")
-    try:
-        response = await call_glm(
-            system_prompt=INVENTORY_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.2,   # low = more factual, less creative
-            max_tokens=1000
+    async def _analyze_batch(self, batch: list[dict]) -> list[dict]:
+        prompt = f"Analyze these SKUs and return a JSON array:\n{json.dumps(batch, indent=2)}"
+        raw = await glm_client.call(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=prompt,
+            temperature=0.0,
         )
-
-        print("\n" + "=" * 60)
-        print("  Z.AI INVENTORY REPORT")
-        print("=" * 60)
-        print(response)
-        print("=" * 60)
-        return response
-
-    except Exception as e:
-        print(f"\n❌ Z.AI call failed: {e}")
-        print("   Check your API key balance or network connection.")
-        return None
-
-
-# ── Run directly ──────────────────────────────────────────────────
-if __name__ == "__main__":
-    FILE_PATH = "dummy_inventory_data.xlsx"   # ← change to your file
-    asyncio.run(run_pipeline(FILE_PATH, reorder_threshold=5))
+        try:
+            clean = raw.strip().removeprefix("```json").removesuffix("```").strip()
+            return json.loads(clean)
+        except json.JSONDecodeError:
+            return [{"sku": r.get("sku"), "error": "parse_failed", "raw": raw} for r in batch]

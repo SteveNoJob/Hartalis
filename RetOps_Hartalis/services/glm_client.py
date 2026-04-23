@@ -1,55 +1,62 @@
-# services/glm_client.py
 import os
 import httpx
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 
 load_dotenv()
 
-# os.getenv reads the VARIABLE NAME from .env
-ZGLM_API_KEY = os.getenv("ZGLM_API_KEY")   # ← variable name
-ZGLM_API_URL = os.getenv("ZGLM_API_URL")   # ← variable name
+class GLMClient:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        api_url: str | None = None,
+        model: str | None = None,
+    ):
+        self.api_key = api_key or os.getenv("ZGLM_API_KEY")
+        self.api_url = api_url or os.getenv("ZGLM_API_URL")
+        self.model   = model  or os.getenv("ZGLM_MODEL", "ilmu-glm-5.1")
 
-async def call_glm(
-    system_prompt: str,
-    user_prompt: str,
-    temperature: float = 0.0,
-    max_tokens: int = 1000
-) -> str:
-    
-    print("API URL:", ZGLM_API_URL)
-    print("API KEY:", "LOADED" if ZGLM_API_KEY else "MISSING")
+        if not self.api_key or not self.api_url:
+            raise EnvironmentError("Missing ZGLM_API_KEY or ZGLM_API_URL.")
 
-    headers = {
-        "Authorization": f"Bearer {ZGLM_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": "glm-5.1",
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-    }
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            ZGLM_API_URL, 
-            json=payload, 
-            headers=headers
+        self._client = httpx.AsyncClient(
+            timeout=120.0,
+            headers={
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            }
         )
 
-        print("STATUS:", response.status_code)
-        print("RAW RESPONSE:", response.text)
-
+    async def call(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 5000,
+    ) -> str:
+        payload = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_prompt}],
+        }
+        response = await self._client.post(
+            f"{self.api_url}/v1/messages",
+            json=payload,
+        )
         response.raise_for_status()
-        data = response.json()
+        return response.json()["content"][0]["text"]
 
-        try:
-            return data["choices"][0]["message"]["content"]
-        except Exception:
-            print("PARSED JSON:", data)
-            raise
-    
+    async def close(self):
+        await self._client.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        await self.close()
+
+
+# Singleton — import this across all your files
+glm_client = GLMClient()
