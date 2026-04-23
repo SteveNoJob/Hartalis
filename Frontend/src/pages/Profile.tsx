@@ -262,6 +262,16 @@ export default function ProfileSettings() {
                             </div>
                         </div>
 
+                        {message && (
+                            <div className={`text-sm font-medium px-4 py-2 rounded-lg ${
+                                message.includes("successfully") || message.includes("updated")
+                                    ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                            }`}>
+                                {message}
+                            </div>
+                        )}
+
                         {/* Save Button & Success Message */}
                         <div className="flex items-center gap-4 mt-8 pt-4">
                             <button
