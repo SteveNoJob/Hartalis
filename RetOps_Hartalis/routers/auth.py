@@ -59,20 +59,6 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
     return {"message": "User created"}
 
-    
-# def get_current_user(request: Request):
-#     token = request.cookies.get("access_token")
-
-#     if not token:
-#         raise HTTPException(status_code=401, detail="Not authenticated")
-
-#     email = verify_token(token)
-
-#     if not email:
-#         raise HTTPException(status_code=401, detail="Invalid token")
-
-#     return email
-
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
 
@@ -94,10 +80,6 @@ def profile(user: User = Depends(get_current_user)):
 def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Logged out"}
-
-# @router.get("/me")
-# def get_me(current_user: User = Depends(get_current_user)):
-#     return current_user
     
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
@@ -114,13 +96,14 @@ def update_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if data.username:
+    print("Incoming data:", data.dict())
+    if data.username is not None:
         current_user.username = data.username
 
-    if data.gender:
+    if data.gender is not None:
         current_user.gender = data.gender
 
-    if data.region:
+    if data.region is not None:
         current_user.region = data.region
 
     if data.password:
@@ -129,4 +112,12 @@ def update_profile(
     db.commit()
     db.refresh(current_user)
 
-    return {"message": "Profile updated"}
+    return {
+        "message": "Profile updated",
+        "user": {
+            "email": current_user.email,
+            "username": current_user.username,
+            "gender": current_user.gender,
+            "region": current_user.region
+        }
+    }

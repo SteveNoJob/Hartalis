@@ -1,8 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
+
+  const { refreshUser } = useAuth();
+
   const [showPassword, setShowPassword] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [email, setEmail] = useState('');
@@ -40,6 +44,8 @@ export default function LoginPage() {
       const data = await res.json();
       console.log(data);
 
+      await refreshUser();
+      
       // now navigate
       navigate("/dashboard");
 

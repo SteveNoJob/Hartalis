@@ -26,7 +26,7 @@ def verify_token(token: str):
 pwd_context = CryptContext(schemes=["bcrypt"])
 
 def hash_password(password: str):
-    return pwd_context.hash(password[:72])
+    return pwd_context.hash(password[:72])  
 
 def verify_password(plain, hashed):
     return pwd_context.verify(plain[:72], hashed)

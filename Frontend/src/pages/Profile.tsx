@@ -7,67 +7,77 @@ export default function ProfileSettings() {
     const { user, loading, refreshUser } = useAuth();
     const navigate = useNavigate();
 
-    if (!user) {
-        navigate('/');
-        return null;
-    }
+    useEffect(() => {
+        if (!loading && !user) {
+            navigate('/');
+        }
+        }, [user, loading]);
 
     // Fake states to simulate saving data
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
     // User Data States
-    // const [fullName, setFullName] = useState('Chenxuan');
     const [email, setEmail] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [message, setMessage] = useState('');
     const [gender, setGender] = useState('Prefer not to say');
     const [region, setRegion] = useState('Kuala Lumpur');
-    // const [email] = useState('cxuan@hackathon.com'); // Usually read-only in basic settings
 
     useEffect(() => {
-    if (user) {
-        setEmail(user.email);
-        setUsername(user.username);
-    }
+        if (user) {
+            setEmail(user.email);
+            setUsername(user.username);
+            setGender(user.gender || "Prefer not to say");
+            setRegion(user.region || "Kuala Lumpur");
+        }
     }, [user]);
-
-    // const handleSave = (e: React.FormEvent) => { // Remove this in the future
-    //     e.preventDefault();
-    //     setIsSaving(true);
-
-    //     // Fake network delay for the judges
-    //     setTimeout(() => {
-    //         setIsSaving(false);
-    //         setShowSuccess(true);
-
-    //         // Hide success message after 3 seconds
-    //         setTimeout(() => {
-    //             setShowSuccess(false);
-    //         }, 3000);
-    //     }, 1500);
-    // };
 
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        if (password && password !== confirmPassword) {
+            setMessage("Passwords do not match");
+            return;
+        }
+
+        if (password && password.length < 6) {
+            setMessage("Password must be at least 6 characters");
+            return;
+        }
+
+        setIsSaving(true);
+
         try {
-            const res = await fetch("http://localhost:8000/auth/profile", {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
+
+            const body: any = {
                 username,
-                password: password || undefined,
                 gender,
                 region,
-            }),
+            };
+
+            if (password) {
+                body.password = password;
+            }
+
+            const res = await fetch("http://localhost:8000/auth/profile", {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: "include",
+                body: JSON.stringify(body),
             });
 
-            const data = await res.json();
+            let data;
+
+            try {
+                data = await res.json();
+            } catch {
+                data = { detail: "Server error" };
+            }
 
             if (!res.ok) {
                 setMessage(data.detail || "Update failed");
@@ -75,17 +85,22 @@ export default function ProfileSettings() {
             }
 
             setMessage("Profile updated!");
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 3000);
 
             // refresh global user state
             await refreshUser();
 
             // optional: clear password field
             setPassword('');
+            setConfirmPassword('');
 
         } catch (err) {
             console.error(err);
             setMessage("Something went wrong");
-        }
+        } finally {
+            setIsSaving(false);
+         }
         };
 
     if (loading) {
@@ -230,6 +245,8 @@ export default function ProfileSettings() {
                                 <input
                                     type="password"
                                     placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                                 />
                             </div>
@@ -238,6 +255,8 @@ export default function ProfileSettings() {
                                 <input
                                     type="password"
                                     placeholder="••••••••"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                                 />
                             </div>

@@ -7,6 +7,12 @@ export default function AuthenticatedDashboard() {
 
   const { user, loading, refreshUser } = useAuth();
 
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/');
+    }
+  }, [user, loading]);
+
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -62,11 +68,6 @@ export default function AuthenticatedDashboard() {
   // if (!user) {
   //   return <p className="text-white text-center mt-10">Redirecting...</p>;
   // }
-  // useEffect(() => {
-  //   if (!loading && !user) {
-  //     navigate('/');
-  //   }
-  // }, [user, loading, navigate]);
 
   return (
     <>
