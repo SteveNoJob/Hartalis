@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime
 from database.base import Base
 
 class User(Base):
@@ -11,3 +11,6 @@ class User(Base):
 
     gender = Column(String, default="Prefer not to say")
     region = Column(String, default="Unknown")
+
+    reset_token = Column(String, nullable=True)
+    reset_token_expiry = Column(DateTime, nullable=True)

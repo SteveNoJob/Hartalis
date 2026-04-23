@@ -1,16 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from services.auth_service import create_access_token
+from services.auth_service import create_access_token, verify_token, hash_password, verify_password, get_user_from_token, generate_reset_token, get_reset_expiry
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from models.schemas import RegisterRequest, LoginRequest
+from models.schemas import RegisterRequest, LoginRequest, UpdateProfileRequest, ResetRequest, ResetConfirmRequest
 from sqlalchemy.orm import Session
 from database.connection import get_db
 from models.user import User
-
-from services.auth_service import verify_token
-
-from models.schemas import UpdateProfileRequest
-from services.auth_service import hash_password, verify_password, get_user_from_token
+from services.email_service import send_reset_email
+from datetime import datetime
 
 router = APIRouter()
 security = HTTPBearer()
@@ -121,3 +118,41 @@ def update_profile(
             "region": current_user.region
         }
     }
+
+@router.post("/reset")
+def reset_password(data: ResetRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+
+    if user:
+        token = generate_reset_token()
+        expiry = get_reset_expiry()
+
+        user.reset_token = token
+        user.reset_token_expiry = expiry
+
+        db.commit()
+
+        send_reset_email(user.email, token)
+
+    return {"message": "If the email exists, a reset link has been sent"}
+
+@router.post("/reset-confirm")
+def reset_confirm(data: ResetConfirmRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.reset_token == data.token).first()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    if user.reset_token_expiry < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Token expired")
+
+    # update password
+    user.password = hash_password(data.new_password)
+
+    # clear token
+    user.reset_token = None
+    user.reset_token_expiry = None
+
+    db.commit()
+
+    return {"message": "Password reset successful"}

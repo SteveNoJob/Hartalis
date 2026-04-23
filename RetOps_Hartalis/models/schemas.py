@@ -64,6 +64,13 @@ class UpdateProfileRequest(BaseModel):
     gender: Optional[str] = None
     region: Optional[str] = None
 
+class ResetRequest(BaseModel):
+    email: str
+
+class ResetConfirmRequest(BaseModel):
+    token: str
+    new_password: str   
+
 class TransactionCreate(BaseModel):
     product_name: str
     quantity: int

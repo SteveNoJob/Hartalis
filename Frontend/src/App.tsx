@@ -10,6 +10,7 @@ import ProfileSettings from './pages/Profile';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
 import ChatInterface from './pages/Chat';
+import ResetPasswordPage from './pages/ResetPassword';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />          
           <Route path="/chats" element={<ChatInterface />} /> 
+          <Route path="/reset-password" element={<ResetPasswordPage />} /> 
         </Routes>
       </Router>
     </AuthProvider>

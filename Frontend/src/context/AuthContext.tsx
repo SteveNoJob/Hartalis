@@ -40,9 +40,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // useEffect(() => {
+  //   fetchUser();
+  // }, []);
   useEffect(() => {
-    fetchUser();
+    let mounted = true;
+
+    const init = async () => {
+      if (mounted) {
+        await fetchUser();
+      }
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
+
+  if (loading) return null;
 
   return (
     <AuthContext.Provider value={{ user, loading, refreshUser: fetchUser }}>

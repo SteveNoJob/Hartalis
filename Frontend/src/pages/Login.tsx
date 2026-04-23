@@ -12,10 +12,32 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const navigate = useNavigate();
 
-  const handleReset = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    alert(`Password reset link sent to ${email}`);
-    setShowReset(false);
+    console.log("RESET CLICKED");
+    try {
+      const res = await fetch("http://localhost:8000/auth/reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Reset failed");
+      }
+
+      const data = await res.json();
+      console.log(data);
+
+      alert("Reset link sent! Check your email.");
+      setShowReset(false);
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to send reset email");
+    }
   };
 
   const [password, setPassword] = useState('');
@@ -33,7 +55,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           email: email, // backend expects username
           password: password,
-          remember_me: true // For now default to true, CHANGE THIS PLS
+          remember_me: true 
         }),
       });
 

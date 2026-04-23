@@ -1,10 +1,22 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const navigate = useNavigate();
+
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, loading, navigate]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   
   const [mainTask, setMainTask] = useState('Demand Prediction');
   const [isTaskMenuOpen, setIsTaskMenuOpen] = useState(false); 

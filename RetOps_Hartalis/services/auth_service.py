@@ -1,5 +1,6 @@
 from jose import jwt, JWTError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import secrets
 from dotenv import load_dotenv
 import os
 from passlib.context import CryptContext
@@ -42,6 +43,9 @@ def get_user_from_token(token: str, db: Session):
 
     except JWTError:
         return None
-    
 
-    #uvicorn data:app --reload
+def generate_reset_token():
+    return secrets.token_urlsafe(32)
+
+def get_reset_expiry():
+    return datetime.utcnow() + timedelta(minutes=15)
