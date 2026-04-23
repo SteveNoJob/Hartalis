@@ -6,24 +6,18 @@ from models.schemas import RegisterRequest, LoginRequest
 from sqlalchemy.orm import Session
 from database.connection import get_db
 from models.user import User
-from passlib.context import CryptContext
 
 from services.auth_service import verify_token
+
+from models.schemas import UpdateProfileRequest
+from services.auth_service import hash_password, verify_password, get_user_from_token
 
 router = APIRouter()
 security = HTTPBearer()
 
-pwd_context = CryptContext(schemes=["bcrypt"])
-
-def hash_password(password: str):
-    return pwd_context.hash(password[:72])
-
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain[:72], hashed)
-
 @router.post("/login")
 def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == data.username).first()
+    user = db.query(User).filter(User.email == data.email).first()
 
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -32,7 +26,7 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
     expire_minutes = 60 * 24 * 7 if data.remember_me else 60
 
     token = create_access_token(
-        data={"sub": user.username},
+        data={"sub": user.email},
         expires_minutes=expire_minutes
     )
 
@@ -55,6 +49,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="User exists")
 
     new_user = User(
+        email=data.email.lower(),
         username=data.username,
         password=hash_password(data.password)
     )
@@ -64,25 +59,65 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
     return {"message": "User created"}
 
-    
-def get_current_user(request: Request):
+def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
 
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    username = verify_token(token)
+    user = get_user_from_token(token, db)
 
-    if not username:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user")
 
-    return username
+    return user
 
 @router.get("/profile")
-def profile(user: str = Depends(get_current_user)):
+def profile(user: User = Depends(get_current_user)):
     return {"message": f"Hello {user}"}
 
 @router.post("/logout")
 def logout(response: Response):
     response.delete_cookie("access_token")
     return {"message": "Logged out"}
+    
+@router.get("/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "email": current_user.email,
+        "username": current_user.username,
+        "gender": current_user.gender,
+        "region": current_user.region
+    }
+    
+@router.put("/profile")
+def update_profile(
+    data: UpdateProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    print("Incoming data:", data.dict())
+    if data.username is not None:
+        current_user.username = data.username
+
+    if data.gender is not None:
+        current_user.gender = data.gender
+
+    if data.region is not None:
+        current_user.region = data.region
+
+    if data.password:
+        current_user.password = hash_password(data.password)
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "message": "Profile updated",
+        "user": {
+            "email": current_user.email,
+            "username": current_user.username,
+            "gender": current_user.gender,
+            "region": current_user.region
+        }
+    }

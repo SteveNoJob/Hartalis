@@ -1,8 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
+
+  const { refreshUser } = useAuth();
+
   const [showPassword, setShowPassword] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [email, setEmail] = useState('');
@@ -12,6 +16,43 @@ export default function LoginPage() {
     e.preventDefault();
     alert(`Password reset link sent to ${email}`);
     setShowReset(false);
+  };
+
+  const [password, setPassword] = useState('');
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    try {
+      const res = await fetch("http://localhost:8000/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // VERY IMPORTANT (for cookies)
+        body: JSON.stringify({
+          email: email, // backend expects username
+          password: password,
+          remember_me: true // For now default to true, CHANGE THIS PLS
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Login failed");
+      }
+
+      const data = await res.json();
+      console.log(data);
+
+      await refreshUser();
+      
+      // now navigate
+      navigate("/dashboard");
+
+    } catch (err) {
+      console.error(err);
+      alert("Login failed");
+    }
   };
 
   return (
@@ -42,7 +83,7 @@ export default function LoginPage() {
                 Sign in to continue optimizing your data
               </p>
 
-              <form className="space-y-5">
+              <form onSubmit={handleLogin} className="space-y-5">
 
                 {/* Email */}
                 <div>
@@ -64,6 +105,8 @@ export default function LoginPage() {
                   <div className="relative mt-1">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
                       className="w-full px-4 py-3 pr-12 bg-white/5 border border-white/10 rounded-lg 
                       focus:outline-none focus:ring-2 focus:ring-blue-500/40 

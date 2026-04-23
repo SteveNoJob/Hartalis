@@ -1,35 +1,111 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from "../context/AuthContext";
 
 export default function ProfileSettings() {
+    const { user, loading, refreshUser } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!loading && !user) {
+            navigate('/');
+        }
+        }, [user, loading]);
 
     // Fake states to simulate saving data
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
     // User Data States
-    const [fullName, setFullName] = useState('Chenxuan');
+    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [message, setMessage] = useState('');
     const [gender, setGender] = useState('Prefer not to say');
     const [region, setRegion] = useState('Kuala Lumpur');
-    const [email] = useState('cxuan@hackathon.com'); // Usually read-only in basic settings
 
-    const handleSave = (e: React.FormEvent) => {
+    useEffect(() => {
+        if (user) {
+            setEmail(user.email);
+            setUsername(user.username);
+            setGender(user.gender || "Prefer not to say");
+            setRegion(user.region || "Kuala Lumpur");
+        }
+    }, [user]);
+
+    const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (password && password !== confirmPassword) {
+            setMessage("Passwords do not match");
+            return;
+        }
+
+        if (password && password.length < 6) {
+            setMessage("Password must be at least 6 characters");
+            return;
+        }
+
         setIsSaving(true);
 
-        // Fake network delay for the judges
-        setTimeout(() => {
-            setIsSaving(false);
-            setShowSuccess(true);
+        try {
 
-            // Hide success message after 3 seconds
-            setTimeout(() => {
-                setShowSuccess(false);
-            }, 3000);
-        }, 1500);
-    };
+            const body: any = {
+                username,
+                gender,
+                region,
+            };
+
+            if (password) {
+                body.password = password;
+            }
+
+            const res = await fetch("http://localhost:8000/auth/profile", {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: "include",
+                body: JSON.stringify(body),
+            });
+
+            let data;
+
+            try {
+                data = await res.json();
+            } catch {
+                data = { detail: "Server error" };
+            }
+
+            if (!res.ok) {
+                setMessage(data.detail || "Update failed");
+                return;
+            }
+
+            setMessage("Profile updated!");
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 3000);
+
+            // refresh global user state
+            await refreshUser();
+
+            // optional: clear password field
+            setPassword('');
+            setConfirmPassword('');
+
+        } catch (err) {
+            console.error(err);
+            setMessage("Something went wrong");
+        } finally {
+            setIsSaving(false);
+         }
+        };
+
+    if (loading) {
+        return <p className="text-white text-center mt-10">Loading...</p>;
+    }
 
     return (
         <div className="min-h-screen animate-bg flex flex-col text-white font-sans pb-12 relative">
@@ -76,21 +152,21 @@ export default function ProfileSettings() {
                             </div>
                         </div>
                         <div className="text-center md:text-left">
-                            <h2 className="text-2xl font-bold text-white">{fullName}</h2>
+                            <h2 className="text-2xl font-bold text-white">{user ? user.username: "?"}</h2>
                             <p className="text-blue-400">{region} • {gender}</p>
                         </div>
                     </div>
 
                     {/* Form Area */}
-                    <form onSubmit={handleSave} className="p-8 space-y-6">
+                    <form onSubmit={handleUpdate} className="p-8 space-y-6">
 
                         {/* Full Name (Full Width Row) */}
                         <div className="mb-6">
                             <label className="block text-sm font-medium text-gray-400 mb-2">Full Name</label>
                             <input
                                 type="text"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                             />
                         </div>
@@ -150,7 +226,7 @@ export default function ProfileSettings() {
                             <div className="relative">
                                 <input
                                     type="email"
-                                    value={email}
+                                    value={user?.email || ""}
                                     readOnly
                                     className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-3 text-gray-500 cursor-not-allowed"
                                 />
@@ -169,6 +245,8 @@ export default function ProfileSettings() {
                                 <input
                                     type="password"
                                     placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                                 />
                             </div>
@@ -177,10 +255,22 @@ export default function ProfileSettings() {
                                 <input
                                     type="password"
                                     placeholder="••••••••"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                                 />
                             </div>
                         </div>
+
+                        {message && (
+                            <div className={`text-sm font-medium px-4 py-2 rounded-lg ${
+                                message.includes("successfully") || message.includes("updated")
+                                    ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                            }`}>
+                                {message}
+                            </div>
+                        )}
 
                         {/* Save Button & Success Message */}
                         <div className="flex items-center gap-4 mt-8 pt-4">

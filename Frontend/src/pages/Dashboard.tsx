@@ -1,8 +1,18 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from "../context/AuthContext";
 
 export default function AuthenticatedDashboard() {
+
+  const { user, loading, refreshUser } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/');
+    }
+  }, [user, loading]);
+
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -33,17 +43,37 @@ export default function AuthenticatedDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      await fetch("http://localhost:8000/auth/logout", {
+        method: "POST",
+        credentials: "include", // 🔥 required so cookie is sent
+      });
+
+      await refreshUser();
+      navigate('/');
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
   };
 
   const taskOptions = ['Demand Prediction', 'Inventory Optimization'];
+
+  console.log(user?.email)
+
+  // if (loading) {
+  //   return <p className="text-white text-center mt-10">Loading...</p>;
+  // }
+
+  // if (!user) {
+  //   return <p className="text-white text-center mt-10">Redirecting...</p>;
+  // }
 
   return (
     <>
       <div className="min-h-screen animate-bg flex flex-col text-white font-sans">
         
-        {/* FIXED HEIGHT HEADER: h-24 and px-6 instead of p-6 */}
+        {/* FIXED HEIGHT HEADER */}
         <header className="h-24 flex justify-between items-center px-6 w-full relative z-50">
           <div className="font-bold text-xl tracking-wider cursor-pointer flex items-center gap-2" onClick={() => navigate('/dashboard')}>
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -57,14 +87,14 @@ export default function AuthenticatedDashboard() {
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
               className="flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 border-2 border-white/20 hover:border-white/60 transition-all shadow-lg"
             >
-              <span className="font-bold text-sm tracking-widest">CX</span>
+              <span className="font-bold text-sm tracking-widest">{user?.username ? user.username.slice(0, 2) : "Loading..."}</span>
             </button>
 
             {isProfileMenuOpen && (
               <div className="absolute right-0 mt-3 w-56 bg-[#0f172a]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col py-2 transition-all">
                 <div className="px-4 py-3 border-b border-white/10 mb-1 bg-white/5">
                   <p className="text-xs text-blue-400 font-medium mb-1">Signed in as</p>
-                  <p className="text-sm font-semibold truncate text-gray-200">cxuan@hackathon.com</p>
+                  <p className="text-sm font-semibold truncate text-gray-200">{user ? user.email: "Loading..."}</p>
                 </div>
                 <button onClick={() => { navigate('/profile'); setIsProfileMenuOpen(false); }} className="px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Profile</button>
                 <button onClick={() => { navigate('/usage'); setIsProfileMenuOpen(false); }} className="px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Usage Settings</button>
@@ -80,7 +110,7 @@ export default function AuthenticatedDashboard() {
         <main className="flex-grow flex flex-col items-center justify-center px-4 w-full max-w-5xl mx-auto -mt-10 relative z-10">
           
           <h1 className="text-4xl md:text-6xl font-extrabold mb-4 text-center tracking-tight">
-            Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Chenxuan</span>
+            Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">{user ? user.username : "Loading..."}</span>
           </h1>
           <p className="text-gray-400 text-lg md:text-xl mb-10 text-center font-light tracking-wide">
             Select your optimization model parameters below.
@@ -136,11 +166,13 @@ export default function AuthenticatedDashboard() {
               )}
             </div>
 
-            <button className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full transition-all shadow-lg hover:shadow-blue-500/25 mr-1 shrink-0">
+            {/* This button navigates to the /chat page */}
+            <button onClick={() => navigate('/chats')} className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full transition-all shadow-lg hover:shadow-blue-500/25 mr-1 shrink-0">
               <svg className="w-6 h-6 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
             </button>
           </div>
 
+          {/* Optional Toggles Area */}
           <div className="w-full max-w-3xl flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
             {mainTask === 'Demand Prediction' && (
               <button

@@ -29,7 +29,7 @@ BASELINE_MONTHS = [4, 6, 7, 9]
 MIN_USER_MONTHS_REQUIRED = 3
 
 # Path to the fallback DOSM CSV (bundled with the repo).
-DOSM_CSV_PATH = Path(__file__).parent / "data" / "iowrt_3d.csv"
+DOSM_CSV_PATH = Path(__file__).parent / "iowrt_3d.csv"
 
 # Category-specific lift during major festivals (expressed as multipliers, not %).
 # Example: 0.65 means +65% vs baseline during Hari Raya for cooking oil.

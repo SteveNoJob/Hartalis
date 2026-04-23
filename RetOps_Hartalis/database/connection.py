@@ -1,8 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import Session
+from pathlib import Path
 
-DATABASE_URL = "sqlite:///./app.db"
+# Always point to workspace-root app.db, regardless of run directory.
+DB_FILE = Path(__file__).resolve().parents[2] / "app.db"
+DATABASE_URL = f"sqlite:///{DB_FILE.as_posix()}"
 
 engine = create_engine(
     DATABASE_URL,

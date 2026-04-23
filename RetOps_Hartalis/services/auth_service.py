@@ -1,7 +1,13 @@
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+import os
+from passlib.context import CryptContext
+from models.user import User
+from sqlalchemy.orm import Session
 
-SECRET_KEY = "your-secret-key"  # later move to .env
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 
 def create_access_token(data: dict, expires_minutes: int):
@@ -10,10 +16,32 @@ def create_access_token(data: dict, expires_minutes: int):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-
 def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload.get("sub")
     except JWTError:
         return None
+
+pwd_context = CryptContext(schemes=["bcrypt"])
+
+def hash_password(password: str):
+    return pwd_context.hash(password[:72])  
+
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain[:72], hashed)
+
+def get_user_from_token(token: str, db: Session):
+    try:
+        email = verify_token(token)
+        if not email:
+            return None
+
+        user = db.query(User).filter(User.email == email).first()
+        return user
+
+    except JWTError:
+        return None
+    
+
+    #uvicorn data:app --reload

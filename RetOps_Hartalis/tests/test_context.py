@@ -1,17 +1,8 @@
-# tests/test_context.py
-"""
-Unit tests for all context modules.
-
-Run with:  pytest tests/test_context.py -v
-
-This file tests each module in isolation so you can tell which one broke
-when something goes wrong.
-"""
-
 import pytest
 import asyncio
 from datetime import date
 from unittest.mock import patch, AsyncMock
+
 
 from context.calendar import (
     get_calendar_events,

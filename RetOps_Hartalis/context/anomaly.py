@@ -98,12 +98,15 @@ def detect_anomalies(sales_history: List[Dict]) -> List[Dict]:
     return anomalies
 
 
-def build_anomaly_context_string(sales_history: List[Dict]) -> str:
+def build_anomaly_context_string(sales_history: List[Dict], max_shown: int = 5) -> str:
     """
     Main function context_builder.py calls.
 
     Returns a plain English string describing recent anomalies,
     or empty string if nothing unusual detected.
+
+    Caps output to the top `max_shown` anomalies ranked by |magnitude_pct|
+    to keep the section size bounded (PRD §4.3.3).
     """
     try:
         anomalies = detect_anomalies(sales_history)
@@ -111,19 +114,31 @@ def build_anomaly_context_string(sales_history: List[Dict]) -> str:
         if not anomalies:
             return ""
 
-        lines = ["RECENT SALES ANOMALIES (last 7 days):"]
+        # Sort by absolute magnitude — biggest deviations matter most
+        anomalies.sort(key=lambda a: abs(a["magnitude_pct"]), reverse=True)
+        total_count = len(anomalies)
+        shown = anomalies[:max_shown]
+        omitted = total_count - len(shown)
+
+        lines = [f"RECENT SALES ANOMALIES (last 7 days, {total_count} detected):"]
         lines.append(
             "These deviations are not explained by the calendar or trend modules. "
             "Consider them when forecasting."
         )
 
-        for a in anomalies:
+        for a in shown:
             direction = "spike" if a["type"] == "spike" else "drop"
             sign = "+" if a["magnitude_pct"] > 0 else ""
             lines.append(
                 f"- {a['product_name']} on {a['date']}: {direction} of "
                 f"{sign}{a['magnitude_pct']}% "
                 f"(observed {a['observed']} units vs baseline avg {a['baseline_avg']})"
+            )
+
+        if omitted > 0:
+            lines.append(
+                f"(…plus {omitted} additional smaller anomalies not shown — "
+                f"see full log for details.)"
             )
 
         return "\n".join(lines)
