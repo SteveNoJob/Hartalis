@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from routers import auth, inventory_router
 from database.connection import engine
 from database.base import Base
-from models import user, transaction
+from models import user, transaction, inventory
 
 app = FastAPI()
 

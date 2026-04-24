@@ -47,7 +47,24 @@ class GLMClient:
 
         data = response.json()
         print("[GLM RAW RESPONSE]", data)
-        
+
+        if not data.get("success", True) or "choices" not in data:
+            raise ValueError(f"GLM API error: {data.get('msg', data)}")
+
+        return data["choices"][0]["message"]["content"]
+
+    async def call_with_history(self, messages: list[dict], max_tokens: int = 5000) -> str:
+        payload = {
+            "model":      self.model,
+            "max_tokens": max_tokens,
+            "messages":   messages,
+        }
+        response = await self._client.post(self.api_url, json=payload)
+        response.raise_for_status()
+
+        data = response.json()
+        print("[GLM RAW RESPONSE]", data)
+
         if not data.get("success", True) or "choices" not in data:
             raise ValueError(f"GLM API error: {data.get('msg', data)}")
 
