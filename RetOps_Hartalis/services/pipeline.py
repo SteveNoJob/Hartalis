@@ -2,6 +2,8 @@ import asyncio
 import json
 from services.glm_client import glm_client
 from services.data_processor import DataProcessor
+import re
+
 
 SYSTEM_PROMPT = """
 You are an inventory optimization engine.
@@ -46,7 +48,7 @@ class InventoryPipeline:
             temperature=0.0,
         )
         try:
-            clean = raw.strip().removeprefix("```json").removesuffix("```").strip()
+            clean = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
             return json.loads(clean)
         except json.JSONDecodeError:
             return [{"sku": r.get("sku"), "error": "parse_failed", "raw": raw} for r in batch]

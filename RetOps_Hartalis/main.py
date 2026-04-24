@@ -1,18 +1,16 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-from routers import auth
-from database.connection import engine
-from database.base import Base
-from models import user, transaction  # import models so SQLAlchemy registers them
-
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from routers import auth, inventory_router
+from database.connection import engine
+from database.base import Base
+from models import user, transaction
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # your React dev server
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -20,22 +18,7 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# database setup
 Base.metadata.create_all(bind=engine)
 
-# auth routes
-app.include_router(auth.router, prefix="/auth")
-
-# inventory routes
-@app.post("/run")
-async def run_pipeline():
-    try:
-        data       = await processor.load_all()       # ← add await
-        summary_df = processor.build_sku_summary(data)
-    except Exception as e:
-        raise HTTPException(422, f"Data processing failed: {str(e)}")
-
-    pipeline = InventoryPipeline()
-    results  = await pipeline.run(summary_df)
-
-    return JSONResponse(content={"status": "ok", "results": results})
+app.include_router(auth.router,             prefix="/auth")
+app.include_router(inventory_router.router, prefix="/inventory")

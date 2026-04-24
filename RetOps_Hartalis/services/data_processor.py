@@ -6,10 +6,7 @@ from dataclasses import dataclass
 
 
 FILE_PATHS = {
-    "sales":     "./data/iowrt_3d.csv",
-    "stock":     "./data/iowrt_3d.csv",
-    "forecasts": "./data/iowrt_3d.csv",
-    "suppliers": "./data/iowrt_3d.csv",
+    "sales": "./data/iowrt_3d.csv",  # temp: using test dataset directly
 }
 
 
@@ -17,10 +14,7 @@ def safe_read(name: str) -> pd.DataFrame:
     path = FILE_PATHS.get(name)
     if not path or not os.path.exists(path):
         raise FileNotFoundError(f"No file found for '{name}' at {path}")
-    if path.endswith(".csv"):
-        return pd.read_csv(path)
-    else:
-        return pd.read_excel(path)
+    return pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path)
 
 
 async def detect_columns(df: pd.DataFrame) -> dict:
@@ -38,7 +32,7 @@ Rules:
 - Each raw column maps to at most one canonical name
 - Each canonical name is used at most once
 - If a column doesn't clearly map to any canonical name, omit it
-- Return ONLY valid JSON like: {"series": "sku", "sales": "quantity", "volume": "stock_level"}
+- Return ONLY valid JSON like: {"series": "sku", "sales": "quantity"}
 - No extra text, no markdown""",
         user_prompt=f"Columns: {columns}\nSample data: {json.dumps(sample, default=str)}",
         temperature=0.0,
@@ -60,20 +54,18 @@ async def smart_load(name: str, required: list[str]) -> pd.DataFrame:
     missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(
-            f"{name} is missing required columns: {missing}. "
-            f"Got: {list(df.columns)}"
+            f"[{name}] missing required columns: {missing}. Got: {list(df.columns)}"
         )
 
-    df = df.dropna(subset=required)
-    return df
+    return df.dropna(subset=required)
 
 
 @dataclass
 class InventoryData:
     sales:     pd.DataFrame
-    stock:     pd.DataFrame
-    forecasts: pd.DataFrame
-    suppliers: pd.DataFrame
+    stock:     pd.DataFrame | None
+    forecasts: pd.DataFrame | None
+    suppliers: pd.DataFrame | None
 
 
 class DataProcessor:
@@ -81,15 +73,18 @@ class DataProcessor:
         self.data_dir = data_dir
 
     async def load_all(self) -> InventoryData:
+        # only sales is compulsory — everything else is optional
         sales = await smart_load("sales", required=["sku", "quantity"])
+
         return InventoryData(
             sales     = sales,
-            stock     = sales,
-            forecasts = sales,
-            suppliers = sales,
+            stock     = None,   # teammate's data, not available yet
+            forecasts = None,   # teammate's forecast, not available yet
+            suppliers = None,
         )
 
     def build_sku_summary(self, data: InventoryData) -> pd.DataFrame:
+        # aggregate: avg monthly sales per SKU
         avg_sales = (
             data.sales
             .groupby("sku")["quantity"]
@@ -97,11 +92,13 @@ class DataProcessor:
             .reset_index()
             .rename(columns={"quantity": "avg_daily_sales"})
         )
+
+        # these are assumed values — clearly labelled
         return avg_sales.assign(
-            stock_level    = avg_sales["avg_daily_sales"] * 14,
-            forecast       = avg_sales["avg_daily_sales"] * 30,
-            lead_time_days = 7,
-            supplier_name  = "unknown",
+            stock_level    = avg_sales["avg_daily_sales"] * 14,  # assume 2-week stock
+            forecast       = avg_sales["avg_daily_sales"] * 30,  # assume 30-day forecast
+            lead_time_days = 7,                                   # assumed
+            supplier_name  = "unknown",                           # no supplier data yet
         )
 
     def to_json_records(self, df: pd.DataFrame) -> list[dict]:

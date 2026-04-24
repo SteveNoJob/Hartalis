@@ -21,8 +21,7 @@ class GLMClient:
         self._client = httpx.AsyncClient(
             timeout=120.0,
             headers={
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
+                "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
             }
         )
@@ -38,15 +37,21 @@ class GLMClient:
             "model": self.model,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "system": system_prompt,
-            "messages": [{"role": "user", "content": user_prompt}],
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
         }
-        response = await self._client.post(
-            f"{self.api_url}/v1/messages",
-            json=payload,
-        )
+        response = await self._client.post(self.api_url, json=payload)
         response.raise_for_status()
-        return response.json()["content"][0]["text"]
+
+        data = response.json()
+        print("[GLM RAW RESPONSE]", data)
+        
+        if not data.get("success", True) or "choices" not in data:
+            raise ValueError(f"GLM API error: {data.get('msg', data)}")
+
+        return data["choices"][0]["message"]["content"]
 
     async def close(self):
         await self._client.aclose()
@@ -58,5 +63,4 @@ class GLMClient:
         await self.close()
 
 
-# Singleton — import this across all your files
 glm_client = GLMClient()
