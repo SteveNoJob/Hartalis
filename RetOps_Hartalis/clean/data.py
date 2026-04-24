@@ -2,7 +2,7 @@ import json
 import os
 import sys
 from fastapi import FastAPI, HTTPException, status, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, model_validator
 from typing import Optional
 import pandas as pd
 import io
@@ -41,12 +41,35 @@ base_url = os.getenv("ZAI_BASE_URL")
 client = ZaiClient(api_key=api_key, base_url=base_url)
 
 
-# 2. Define Data Models (for Request Validation)
+# 2. Define Data Models (for Request & AI Validation)
 class RawDataRequest(BaseModel):
     raw_content: str
     file_type: str = "Text/Log"
     source_system: Optional[str] = "Manual Entry"
     user_id: Optional[int] = None
+
+# --- NEW: STRICT AI GATEKEEPER SCHEMAS ---
+class TransactionItem(BaseModel):
+    transaction_id: Optional[str] = None
+    timestamp: str  # Validated as string to match YYYY-MM-DD format rule
+    item_name: str
+    quantity: int
+    unit_price: float
+    total_value: float
+    currency: str = "MYR"
+
+    @model_validator(mode='after')
+    def validate_math(self) -> 'TransactionItem':
+        """Prevents Math Hallucinations by ensuring total_value matches quantity * unit_price"""
+        expected_total = self.quantity * self.unit_price
+        # Check if total_value is within 1 cent of the calculation (handles float imprecision)
+        if abs(self.total_value - expected_total) > 0.01:
+            raise ValueError(f"Math mismatch: {self.quantity} * {self.unit_price} != {self.total_value}")
+        return self
+
+class AIResponseSchema(BaseModel):
+    transactions: list[TransactionItem]
+# -----------------------------------------
 
 
 def parse_timestamp(value: Optional[str]) -> datetime:
@@ -110,9 +133,10 @@ def persist_transactions(cleaned_data: dict, user_id: Optional[int] = None) -> i
         db.close()
 
 # 3. The Reasoning Engine Logic
-def transform_transaction_data(raw_content: str, file_type: str) -> dict:
+def transform_transaction_data(raw_content: str, file_type: str, max_retries: int = 3) -> Optional[dict]:
     """
     Uses GLM 5.1 to reason through messy retailer data and output a standardized JSON.
+    Includes an automated self-correction loop and strict Pydantic validation.
     """
     system_prompt = """
     You are a Data Intelligence Engine. Your task is to parse raw retail transaction 
@@ -141,55 +165,75 @@ def transform_transaction_data(raw_content: str, file_type: str) -> dict:
     5. Output ONLY valid JSON matching the exact schema above.
     """
 
-    user_input = f"Format: {file_type}\nRaw Data Content:\n{raw_content}"
+    attempt = 0
+    error_context = ""
 
-    try:
-        response = client.chat.completions.create(
-            model="ilmu-glm-5.1", 
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
-            ],
-            temperature=0.1, 
-            response_format={"type": "json_object"}
-        )
+    while attempt < max_retries:
+        # Append feedback if this is a retry
+        retry_suffix = f"\n\nPREVIOUS ERROR: {error_context}\nPlease fix the JSON structure, data types, or math." if error_context else ""
+        user_input = f"Format: {file_type}\nRaw Data Content:\n{raw_content}{retry_suffix}"
 
-        # 1. Extract the raw text response
-        raw_response = response.choices[0].message.content
-        
-        # ---> DEBUG: Print exactly what the AI said to the terminal <---
-        print(f"\n--- RAW AI RESPONSE ---\n{raw_response}\n-----------------------\n")
+        try:
+            response = client.chat.completions.create(
+                model="ilmu-glm-5.1", 
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_input}
+                ],
+                temperature=0.0, # Deterministic setting for data extraction
+                response_format={"type": "json_object"}
+            )
 
-        if not raw_response:
-             raise ValueError("The AI returned an empty response.")
-
-        # 2. Extract JSON safely even if model adds extra text.
-        cleaned_response = extract_json_payload(raw_response)
+            # 1. Extract the raw text response
+            raw_response = response.choices[0].message.content
             
-        # 3. Now parse it safely into a Python dictionary
-        standardized_json = json.loads(cleaned_response)
-        return standardized_json
+            # ---> DEBUG: Print exactly what the AI said to the terminal <---
+            print(f"\n--- RAW AI RESPONSE (Attempt {attempt+1}) ---\n{raw_response}\n-----------------------\n")
 
-    except Exception as e:
-        print(f"Error in Reasoning Engine: {e}")
-        return None
+            if not raw_response:
+                 raise ValueError("The AI returned an empty response.")
 
-# 4. The API Endpoint
+            # 2. Extract JSON safely even if model adds extra text.
+            cleaned_response = extract_json_payload(raw_response)
+                
+            # 3. Now parse it safely into a Python dictionary
+            data_dict = json.loads(cleaned_response)
+
+            # 4. STRICT PYDANTIC VALIDATION (The Gatekeeper)
+            validated_data = AIResponseSchema(**data_dict)
+            
+            # If we reach here, the data is 100% clean and verified
+            return validated_data.model_dump()
+
+        except (ValidationError, json.JSONDecodeError, ValueError) as e:
+            attempt += 1
+            error_context = str(e)
+            print(f"Error in Reasoning Engine - Attempt {attempt} failed: {error_context}")
+            
+    # If we exhaust all retries, return None to trigger the graceful error state
+    return None
+
+# 4. The API Endpoints
 @app.post("/api/v1/ingest-transaction")
 async def ingest_transaction(request: RawDataRequest):
     """
     Endpoint to receive messy data, clean it via GLM, and store it.
     """
-    # Step A: Clean the data via GLM 5.1
+    # Step A: Clean the data via GLM 5.1 with strict gatekeeping
     cleaned_data = transform_transaction_data(request.raw_content, request.file_type)
     
-    if not cleaned_data or "transactions" not in cleaned_data:
+    # Step B: Graceful Error State (Hard Rejection)
+    if not cleaned_data:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, 
-            detail="AI Engine failed to parse the data into the correct schema."
+            detail={
+                "code": "AI_CONFIDENCE_LOW",
+                "message": "AI Engine failed to parse the data into the correct schema after multiple attempts. Transaction rejected to protect database integrity."
+            }
         )
+        
     print("parse completed")
-    # Step B: Store in SQLite via SQLAlchemy
+    # Step C: Store in SQLite via SQLAlchemy
     persist_transactions(cleaned_data, request.user_id)
     
     return {
@@ -223,14 +267,20 @@ async def ingest_file(file: UploadFile = File(...)):
             df = pd.read_excel(io.BytesIO(contents))
             
         # 4. Convert the data to a raw string format for the AI
-        # We convert it to a CSV-style string because LLMs read CSVs very well
         raw_string_data = df.to_csv(index=False)
         
         # 5. Send it to your existing AI Reasoning function!
         cleaned_data = transform_transaction_data(raw_string_data, f"Uploaded File: {file.filename}")
         
-        if not cleaned_data or "transactions" not in cleaned_data:
-            raise HTTPException(status_code=422, detail="AI Engine failed to parse the file.")
+        # 6. Graceful Error State (Hard Rejection)
+        if not cleaned_data:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, 
+                detail={
+                    "code": "AI_CONFIDENCE_LOW",
+                    "message": "AI Engine failed to securely parse the uploaded file. Processing aborted."
+                }
+            )
 
         # Placeholder until frontend sends user_id for file ingest flow.
         persist_transactions(cleaned_data, user_id=None)

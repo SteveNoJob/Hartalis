@@ -6,10 +6,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
+from typing import Optional
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+
+# Assuming 'zai' is your custom SDK or wrapper.
 from zai import ZaiClient
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
@@ -35,6 +39,26 @@ class DemandPredictionRequest(BaseModel):
     horizon_value: int = Field(..., ge=1, description="How far ahead to forecast.")
     horizon_unit: str = Field(..., description="One of: day, month, year.")
 
+# --- NEW: STRICT AI GATEKEEPER SCHEMAS ---
+class PredictionItem(BaseModel):
+    item_name: str
+    ai_reasoning: str
+    predicted_quantity: int
+    confidence_score: float
+
+    @model_validator(mode='after')
+    def validate_logic(self) -> 'PredictionItem':
+        """Prevents hallucinated negative demand and invalid confidence bounds."""
+        if self.predicted_quantity < 0:
+            raise ValueError(f"predicted_quantity cannot be negative for {self.item_name}. Demand must be >= 0.")
+        if not (0.0 <= self.confidence_score <= 1.0):
+            raise ValueError(f"confidence_score must be between 0.0 and 1.0. Received {self.confidence_score}.")
+        return self
+
+class AIPredictionResponse(BaseModel):
+    predictions: list[PredictionItem]
+# -----------------------------------------
+
 
 def horizon_to_days(value: int, unit: str) -> int:
     normalized = unit.strip().lower()
@@ -47,7 +71,7 @@ def horizon_to_days(value: int, unit: str) -> int:
     )
 
 def extract_json_payload(text: str) -> str:
-    """Helper from your data.py to safely extract JSON from model responses."""
+    """Safely extract JSON from model responses."""
     cleaned = text.strip()
     if cleaned.startswith("```json"):
         cleaned = cleaned[7:]
@@ -60,24 +84,16 @@ def extract_json_payload(text: str) -> str:
     first_brace = cleaned.find("{")
     last_brace = cleaned.rfind("}")
     
-    # Check for list array instead of dict (since our forecast returns a list)
-    first_bracket = cleaned.find("[")
-    last_bracket = cleaned.rfind("]")
-    
-    # Use array boundaries if they exist and wrap the whole thing
-    if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
-        if first_brace == -1 or first_bracket < first_brace:
-            return cleaned[first_bracket:last_bracket + 1]
-
     if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
         return cleaned[first_brace:last_brace + 1]
     return cleaned
 
 # 3. The Reasoning Engine Logic
-def ask_zai_for_prediction(historical_data: dict, horizon_days: int, current_date_myt: str) -> list:
+def ask_zai_for_prediction(historical_data: dict, horizon_days: int, current_date_myt: str, max_retries: int = 3) -> Optional[list]:
     """Calls the Zai SDK to generate demand forecasts based on time-series data."""
     
-    # 1. The System Prompt: Define Persona, Rules, and Formatting
+    # Notice: I updated the schema to wrap the array in a root {"predictions": [...]} object. 
+    # LLMs parse and output this much more reliably than raw top-level arrays.
     system_prompt = """You are an expert supply chain and demand forecasting AI. 
     Your task is to analyze historical transaction data and predict future demand.
 
@@ -85,65 +101,69 @@ def ask_zai_for_prediction(historical_data: dict, horizon_days: int, current_dat
     1. Identify trends, seasonality, and recent anomalies (spikes/drops).
     2. Factor in the current date and timeframe to anticipate upcoming seasonal shifts.
     3. If historical data is sparse or zero, reflect this with a low confidence score.
-    4. You must output ONLY a valid JSON array. Do not wrap the JSON in markdown code blocks or add conversational text.
+    4. You must output ONLY a valid JSON object matching the exact schema below.
 
     EXPECTED JSON SCHEMA:
-    [
     {
-        "item_name": "string",
-        "ai_reasoning": "string (Explain your step-by-step logic, referencing the numbers BEFORE giving the prediction)",
-        "predicted_quantity": integer (The final forecasted number),
-        "confidence_score": float (0.0 to 1.0)
-    }
-    ]"""
+        "predictions": [
+            {
+                "item_name": "string",
+                "ai_reasoning": "string (Explain your step-by-step logic, referencing the numbers BEFORE giving the prediction)",
+                "predicted_quantity": integer (The final forecasted number, MUST be 0 or greater),
+                "confidence_score": float (0.0 to 1.0)
+            }
+        ]
+    }"""
 
-        # 2. The User Prompt: Inject dynamic data and Timezone Context
-    user_input = f"""
+    attempt = 0
+    error_context = ""
+
+    while attempt < max_retries:
+        retry_suffix = f"\n\nPREVIOUS ERROR: {error_context}\nPlease fix the JSON structure, data types, or logic." if error_context else ""
+        
+        user_input = f"""
         Current Date (Malaysia Time / UTC+8): {current_date_myt}
         Forecast Horizon: Next {horizon_days} days.
 
         Historical Data (Grouped by Year-Month):
         {json.dumps(historical_data, indent=2)}
 
-        Generate the demand forecast JSON array now:
+        Generate the demand forecast JSON now:{retry_suffix}
         """
 
-    try:
-        response = client.chat.completions.create(
-            model="ilmu-glm-5.1",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
-            ],
-            temperature=0.1, # Keep low for deterministic, analytical outputs
-            # top_p=0.9, # Optional: uncomment if the model gets stuck in repetitive loops
-            response_format={"type": "json_object"}
-        )
+        try:
+            response = client.chat.completions.create(
+                model="ilmu-glm-5.1",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_input}
+                ],
+                temperature=0.0, # Deterministic setting for strict data generation
+                response_format={"type": "json_object"}
+            )
 
-        raw_response = response.choices[0].message.content
-        print(f"\n--- RAW AI RESPONSE ---\n{raw_response}\n-----------------------\n")
-        
-        if not raw_response:
-             raise ValueError("The AI returned an empty response.")
+            raw_response = response.choices[0].message.content
+            print(f"\n--- RAW AI RESPONSE (Attempt {attempt+1}) ---\n{raw_response}\n-----------------------\n")
+            
+            if not raw_response:
+                 raise ValueError("The AI returned an empty response.")
 
-        cleaned_response = extract_json_payload(raw_response)
-        standardized_json = json.loads(cleaned_response)
-        
-        # Ensure it returns the list we asked for
-        if isinstance(standardized_json, dict) and "predictions" in standardized_json:
-            return standardized_json["predictions"]
-        elif isinstance(standardized_json, list):
-            return standardized_json
-        else:
-             # Fallback if wrapped in an unexpected dict key
-            return list(standardized_json.values())[0] if standardized_json else []
+            cleaned_response = extract_json_payload(raw_response)
+            data_dict = json.loads(cleaned_response)
+            
+            # --- THE GATEKEEPER: Strict Pydantic Validation ---
+            validated_data = AIPredictionResponse(**data_dict)
+            
+            # If we reach here, data is fully validated. Return the list of predictions.
+            return validated_data.model_dump()["predictions"]
 
-    except Exception as e:
-        print(f"Error in Forecasting Engine: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"AI Engine failed to generate a forecast: {str(e)}"
-        )
+        except (ValidationError, json.JSONDecodeError, ValueError) as e:
+            attempt += 1
+            error_context = str(e)
+            print(f"Error in Forecasting Engine - Attempt {attempt} failed: {error_context}")
+
+    # Exhausted retries -> Trigger Hard Rejection
+    return None
 
 # 4. The API Endpoint
 @app.post("/api/v1/predict-demand")
@@ -164,7 +184,7 @@ async def predict_demand(request: DemandPredictionRequest):
         # 1. Set the timezone to Malaysia
         myt_tz = ZoneInfo("Asia/Kuala_Lumpur")
         current_time_myt = datetime.now(myt_tz)
-        current_date_myt_str = current_time_myt.strftime("%Y-%m-%d %H:%M:%S") # Pass this to the AI
+        current_date_myt_str = current_time_myt.strftime("%Y-%m-%d %H:%M:%S") 
         
         future_time_myt = current_time_myt + timedelta(days=horizon_days)
         future_timestamp = future_time_myt.strftime("%Y-%m-%d %H:%M:%S")
@@ -177,7 +197,6 @@ async def predict_demand(request: DemandPredictionRequest):
             if not key:
                 continue
                 
-            # Grouping by Year-Month. Assuming your model uses `timestamp` based on data.py
             if hasattr(row, 'timestamp') and row.timestamp:
                 period = row.timestamp.strftime("%Y-%m")
             else:
@@ -188,12 +207,22 @@ async def predict_demand(request: DemandPredictionRequest):
         if not ai_payload:
             raise HTTPException(status_code=422, detail="No valid item data to process.")
 
-        # Let the Zai SDK act as the reasoning engine
+        # Let the Zai SDK act as the reasoning engine with the Gatekeeper loop
         ai_predictions = ask_zai_for_prediction(
             historical_data=ai_payload, 
             horizon_days=horizon_days,
-            current_date_myt=  current_date_myt_str
+            current_date_myt=current_date_myt_str
         )
+
+        # --- Graceful Error State (Hard Rejection) ---
+        if not ai_predictions:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "AI_FORECAST_FAILED",
+                    "message": "The AI Engine failed to generate a reliable forecast after multiple attempts. Aborted to protect data integrity."
+                }
+            )
 
         # Enrich AI data with static system data
         final_predictions = []
@@ -216,10 +245,5 @@ async def predict_demand(request: DemandPredictionRequest):
         }
     finally:
         db.close()
-#uvicorn "demand prediction:app" --reload
 
-# #{
-#   "user_id": 1,
-#   "horizon_value": 2,
-#   "horizon_unit": "month"
-# }
+#uvicorn "demand prediction:app" --reload
