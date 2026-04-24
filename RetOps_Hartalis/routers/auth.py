@@ -9,6 +9,12 @@ from models.user import User
 from services.email_service import send_reset_email
 from datetime import datetime
 
+# For file upload
+from fastapi import File, UploadFile
+import shutil
+import os
+from uuid import uuid4
+
 router = APIRouter()
 security = HTTPBearer()
 
@@ -84,7 +90,8 @@ def get_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "username": current_user.username,
         "gender": current_user.gender,
-        "region": current_user.region
+        "region": current_user.region,
+        "profile_image": current_user.profile_image
     }
     
 @router.put("/profile")
@@ -156,3 +163,24 @@ def reset_confirm(data: ResetConfirmRequest, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Password reset successful"}
+
+@router.post("/upload-avatar")
+def upload_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # generate unique filename
+    ext = file.filename.split(".")[-1]
+    filename = f"{uuid4()}.{ext}"
+
+    filepath = os.path.join("uploads", filename)
+
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # save path in DB
+    current_user.profile_image = f"/uploads/{filename}"
+    db.commit()
+
+    return {"profile_image": current_user.profile_image}

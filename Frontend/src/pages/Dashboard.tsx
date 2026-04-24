@@ -59,15 +59,11 @@ export default function AuthenticatedDashboard() {
 
   const taskOptions = ['Demand Prediction', 'Inventory Optimization'];
 
-  console.log(user?.email)
-
-  // if (loading) {
-  //   return <p className="text-white text-center mt-10">Loading...</p>;
-  // }
-
-  // if (!user) {
-  //   return <p className="text-white text-center mt-10">Redirecting...</p>;
-  // }
+  useEffect(() => {
+    if (!user) {
+      refreshUser();
+    }
+  }, [user]);
 
   return (
     <>
@@ -87,7 +83,17 @@ export default function AuthenticatedDashboard() {
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
               className="flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 border-2 border-white/20 hover:border-white/60 transition-all shadow-lg"
             >
-              <span className="font-bold text-sm tracking-widest">{user?.username ? user.username.slice(0, 2) : "Loading..."}</span>
+              {user?.profile_image ? (
+                <img
+                  src={`http://localhost:8000${user.profile_image}`}
+                  alt="avatar"
+                  className="w-full h-full object-cover rounded-full"
+                />
+              ) : (
+                <span className="font-bold text-sm tracking-widest">
+                  {user?.username?.slice(0, 2) || "?"}
+                </span>
+              )}
             </button>
 
             {isProfileMenuOpen && (

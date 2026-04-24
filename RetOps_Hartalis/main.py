@@ -6,6 +6,7 @@ from database.base import Base
 from models import user, transaction  # import models so SQLAlchemy registers them
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -16,6 +17,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # database setup
 Base.metadata.create_all(bind=engine)

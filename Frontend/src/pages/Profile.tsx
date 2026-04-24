@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from "../context/AuthContext";
+import Cropper from "react-easy-crop";
 
 export default function ProfileSettings() {
     const { user, loading, refreshUser } = useAuth();
@@ -26,6 +27,12 @@ export default function ProfileSettings() {
     const [gender, setGender] = useState('Prefer not to say');
     const [region, setRegion] = useState('Kuala Lumpur');
 
+    const [preview, setPreview] = useState<string | null>(null);
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);    
+
     useEffect(() => {
         if (user) {
             setEmail(user.email);
@@ -34,6 +41,57 @@ export default function ProfileSettings() {
             setRegion(user.region || "Kuala Lumpur");
         }
     }, [user]);
+
+    const getCroppedImg = async (imageSrc: string, crop: any): Promise<Blob> => {
+        const image = new Image();
+        image.src = imageSrc;
+
+        await new Promise((resolve) => {
+            image.onload = resolve;
+        });
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = crop.width;
+        canvas.height = crop.height;
+        
+
+        ctx?.drawImage(
+            image,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            0,
+            0,
+            crop.width,
+            crop.height
+        );
+        
+        return new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                
+            if (blob) resolve(blob);
+            }, "image/jpeg");
+        });
+    };
+
+    const handleUpload = async (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("http://localhost:8000/auth/upload-avatar", {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+        });
+
+        const data = await res.json();
+        console.log(data);
+
+        await refreshUser();
+    };
 
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -140,26 +198,69 @@ export default function ProfileSettings() {
                 {/* Profile Card */}
                 <div className="w-full bg-[#0f172a]/60 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
 
-                    {/* Header Area with Avatar */}
-                    <div className="bg-white/5 p-8 border-b border-white/10 flex flex-col md:flex-row items-center gap-6">
-                        <div className="relative group cursor-pointer">
-                            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 border-4 border-[#0f172a] flex items-center justify-center shadow-xl group-hover:scale-105 transition-transform">
-                                <span className="font-bold text-3xl tracking-widest text-white">CX</span>
-                            </div>
-                            {/* Overlay that appears on hover to suggest uploading a photo */}
-                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                            </div>
-                        </div>
-                        <div className="text-center md:text-left">
-                            <h2 className="text-2xl font-bold text-white">{user ? user.username: "?"}</h2>
-                            <p className="text-blue-400">{region} • {gender}</p>
-                        </div>
+                {/* Header Area with Avatar */}
+                <div className="bg-white/5 p-8 border-b border-white/10 flex flex-col md:flex-row items-center gap-6">
+
+                <label htmlFor="avatarInput" className="relative group cursor-pointer">
+
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 border-4 border-[#0f172a] flex items-center justify-center shadow-xl group-hover:scale-105 transition-transform overflow-hidden">
+
+                    {preview || user?.profile_image ? (
+                        <img
+                        src={
+                            preview
+                            ? preview
+                            : `http://localhost:8000${user?.profile_image}`
+                        }
+                        alt="avatar"
+                        className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <span className="font-bold text-3xl tracking-widest text-white">
+                        {user?.username?.slice(0, 2).toUpperCase()}
+                        </span>
+                    )}
+
                     </div>
+
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    </div>
+
+                </label>
+
+                {/* Hidden input */}
+                <input
+                    id="avatarInput"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                    const file = e.target.files?.[0];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => setImageSrc(reader.result as string);
+                            reader.readAsDataURL(file);
+                        }
+                    }}
+                />
+
+                <div className="text-center md:text-left">
+                    <h2 className="text-2xl font-bold text-white">
+                    {user ? user.username : "?"}
+                    </h2>
+                    <p className="text-blue-400">{region} • {gender}</p>
+                </div>
+
+                </div>
 
                     {/* Form Area */}
                     <form onSubmit={handleUpdate} className="p-8 space-y-6">
-
+                        
                         {/* Full Name (Full Width Row) */}
                         <div className="mb-6">
                             <label className="block text-sm font-medium text-gray-400 mb-2">Full Name</label>
@@ -301,6 +402,67 @@ export default function ProfileSettings() {
                     </form>
                 </div>
             </main>
+
+            {imageSrc && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                    <div className="bg-[#0f172a] p-6 rounded-xl w-[90%] max-w-md">
+
+                    <div className="relative w-full h-64 bg-black">
+                        <Cropper
+                        image={imageSrc}
+                        crop={crop}
+                        cropShape="round"
+                        zoom={zoom}
+                        aspect={1} // square avatar
+                        onCropChange={setCrop}
+                        onZoomChange={setZoom}
+                        onCropComplete={(_, croppedPixels) => setCroppedAreaPixels(croppedPixels)}
+                        />
+                    </div>
+
+                    <input
+                        type="range"
+                        min={1}
+                        max={3}
+                        step={0.1}
+                        value={zoom}
+                        onChange={(e) => setZoom(Number(e.target.value))}
+                        className="w-full mt-4"
+                    />
+
+                    <div className="flex justify-end gap-3 mt-4">
+                        <button
+                        onClick={() => setImageSrc(null)}
+                        className="px-4 py-2 bg-gray-600 rounded"
+                        >
+                        Cancel
+                        </button>
+
+                        <button
+                        onClick={async () => {
+                            const croppedBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
+                            const file = new File([croppedBlob], "avatar.jpg", { type: "image/jpeg" });
+                            if (file.size > 2 * 1024 * 1024) {
+                                alert("Max 2MB");
+                                return;
+                            }
+                            setPreview(URL.createObjectURL(file));
+                            await handleUpload(file);
+
+                            setImageSrc(null);
+                        }}
+                        className="px-4 py-2 bg-blue-600 rounded"
+                        >
+                        Save
+                        </button>
+                    </div>
+
+                    </div>
+                </div>
+                )}                
+
         </div>
+
+        
     );
 }

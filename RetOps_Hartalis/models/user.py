@@ -14,3 +14,5 @@ class User(Base):
 
     reset_token = Column(String, nullable=True)
     reset_token_expiry = Column(DateTime, nullable=True)
+
+    profile_image = Column(String, nullable=True)

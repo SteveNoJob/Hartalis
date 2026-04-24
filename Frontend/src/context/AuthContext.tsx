@@ -5,6 +5,7 @@ type User = {
   username: string;
   gender?: string;
   region?: string;
+  profile_image?: string;
 };
 
 type AuthContextType = {
@@ -59,7 +60,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  if (loading) return null;
+  // if (loading) return null;
+  if (loading) {
+    return <div className="text-white text-center mt-10">Loading...</div>;
+  }
 
   return (
     <AuthContext.Provider value={{ user, loading, refreshUser: fetchUser }}>
