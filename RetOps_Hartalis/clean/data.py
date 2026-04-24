@@ -31,12 +31,12 @@ app = FastAPI(title="Data Intelligence Layer")
 # Ensure required tables exist when this app runs standalone.
 Base.metadata.create_all(bind=engine)
 # Load the variables from the .env file into the system environment
-load_dotenv()
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path, override=True)
 
 # Fetch the variables using os.getenv
 api_key = os.getenv("ZAI_API_KEY")
 base_url = os.getenv("ZAI_BASE_URL")
-
 # Initialize your client
 client = ZaiClient(api_key=api_key, base_url=base_url)
 
