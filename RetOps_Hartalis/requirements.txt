@@ -12,3 +12,5 @@ pytest-cov
 pandas
 pydantic[email]
 python-multipart
+zai
+zai-sdk
