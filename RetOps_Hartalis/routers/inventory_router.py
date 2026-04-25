@@ -55,7 +55,7 @@ async def upload_and_run(
     for r in results:
         if "error" not in r:
             db.add(InventoryResult(
-                user_id         = 1,
+                user_id         = 3,
                 sku             = r["sku"],
                 status          = r["status"],
                 reorder         = r["reorder"],
@@ -65,7 +65,7 @@ async def upload_and_run(
 
     for _, row in summary_df.iterrows():
         db.add(InventorySummary(
-            user_id         = 1,
+            user_id         = 3,
             sku             = row["sku"],
             avg_daily_sales = row["avg_daily_sales"],
             stock_level     = row["stock_level"],
@@ -96,7 +96,7 @@ async def upload_and_run(
 
     return JSONResponse(content={
         "status":  "ok",
-        "user_id": 1,
+        "user_id": 3,
         "results": results,
         "report":  report,
     })
@@ -108,7 +108,7 @@ async def chat(
     db:   Session = Depends(get_db),
 ):
     response = await chat_with_inventory(
-        user_id      = 1,
+        user_id      = 3,
         user_message = body.message,
         db           = db,
     )
@@ -119,9 +119,9 @@ async def chat(
 def get_history(
     db: Session = Depends(get_db),
 ):
-    results = db.query(InventoryResult).filter_by(user_id=1).all()
-    summary = db.query(InventorySummary).filter_by(user_id=1).all()
-    history = db.query(ChatMessage).filter_by(user_id=1).order_by(ChatMessage.id).all()
+    results = db.query(InventoryResult).filter_by(user_id=3).all()
+    summary = db.query(InventorySummary).filter_by(user_id=3).all()
+    history = db.query(ChatMessage).filter_by(user_id=3).order_by(ChatMessage.id).all()
 
     return {
         "results": [
