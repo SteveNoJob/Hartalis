@@ -46,7 +46,7 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
 
 @router.post("/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.username == data.username).first()
+    existing = db.query(User).filter(User.email == data.email).first()
 
     if existing:
         raise HTTPException(status_code=400, detail="User exists")
