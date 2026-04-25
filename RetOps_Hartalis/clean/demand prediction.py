@@ -231,8 +231,19 @@ async def predict_demand(request: DemandPredictionRequest):
         # NEW: Build ET's context string (calendar + weather + trends + anomalies)
         # Also handles what-if scenario if frontend sends one
         # ============================================================
+        sales_history = [
+            {
+                "product_name": row.item_name,   # map item_name → product_name
+                "date": row.timestamp.strftime("%Y-%m-%d") if row.timestamp else "unknown",
+                "units_sold": int(row.quantity or 0),
+            }
+            for row in user_transactions
+            if row.item_name
+        ]
+
         context_str = await build_full_context(
-            scenario_query=request.scenario,    # None if no what-if
+            sales_history=sales_history,    # now anomaly detection works correctly
+            scenario_query=request.scenario,
             include_weather=True,
             city="Kuala Lumpur",
         )
