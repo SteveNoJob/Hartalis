@@ -42,7 +42,6 @@ def build_data_context(user_id: int, db: Session) -> str:
 
 
 async def chat_with_inventory(user_id: int, user_message: str, db: Session) -> str:
-    # load chat history for this user
     history = (
         db.query(ChatMessage)
         .filter_by(user_id=user_id)
@@ -50,19 +49,17 @@ async def chat_with_inventory(user_id: int, user_message: str, db: Session) -> s
         .all()
     )
 
-    # build data context from stored results
     data_context = build_data_context(user_id, db)
-
-    # build full messages array
     messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT + "\n\n" + data_context}]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_message})
 
-    # call GLM with full history
-    response = await glm_client.call_with_history(messages)
+    try:
+        response = await glm_client.call_with_history(messages)
+    except Exception:
+        response = "The AI is temporarily unavailable due to high demand. Your question has been saved — please try again in a moment."
 
-    # persist both turns to DB
     db.add(ChatMessage(user_id=user_id, role="user",      content=user_message))
     db.add(ChatMessage(user_id=user_id, role="assistant", content=response))
     db.commit()

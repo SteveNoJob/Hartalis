@@ -19,7 +19,7 @@ class GLMClient:
             raise EnvironmentError("Missing ZGLM_API_KEY or ZGLM_API_URL.")
 
         self._client = httpx.AsyncClient(
-            timeout=120.0,
+            timeout=40.0,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -42,8 +42,13 @@ class GLMClient:
                 {"role": "user", "content": user_prompt},
             ],
         }
-        response = await self._client.post(self.api_url, json=payload)
-        response.raise_for_status()
+        try:
+            response = await self._client.post(self.api_url, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise ValueError(f"GLM API error: {e.response.status_code} — {str(e)}")
+        except httpx.TimeoutException:
+            raise ValueError("GLM API timed out — try again in a moment")
 
         data = response.json()
         print("[GLM RAW RESPONSE]", data)
@@ -59,8 +64,13 @@ class GLMClient:
             "max_tokens": max_tokens,
             "messages":   messages,
         }
-        response = await self._client.post(self.api_url, json=payload)
-        response.raise_for_status()
+        try:
+            response = await self._client.post(self.api_url, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise ValueError(f"GLM API error: {e.response.status_code} — {str(e)}")
+        except httpx.TimeoutException:
+            raise ValueError("GLM API timed out — try again in a moment")
 
         data = response.json()
         print("[GLM RAW RESPONSE]", data)
