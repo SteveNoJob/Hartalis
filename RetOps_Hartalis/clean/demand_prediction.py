@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from typing import Optional
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from fastapi import APIRouter
 
 # Assuming 'zai' is your custom SDK or wrapper.
 from zai import ZaiClient
@@ -28,7 +29,8 @@ from models.transaction import Transaction
 from context.context_builder import build_full_context
 
 # 1. Initialize App and Configuration
-app = FastAPI(title="Demand Prediction API with Zai SDK")
+# app = FastAPI(title="Demand Prediction API with Zai SDK")
+router = APIRouter()
 Base.metadata.create_all(bind=engine)
 
 load_dotenv()
@@ -190,7 +192,7 @@ Generate the demand forecast JSON now.{retry_suffix}
 
 
 # 4. The API Endpoint
-@app.post("/api/v1/predict-demand")
+@router.post("/api/v1/predict-demand")
 async def predict_demand(request: DemandPredictionRequest):
     db: Session = SessionLocal()
     try:

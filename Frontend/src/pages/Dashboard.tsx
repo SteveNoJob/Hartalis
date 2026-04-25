@@ -85,8 +85,16 @@ export default function AuthenticatedDashboard() {
       });
 
       const data = await response.json();
-      console.log('Success:', data);
-      alert(`File processed successfully! Check console for results.`);
+
+      // console.log('Success:', data);
+
+      // alert(`File processed successfully! Check console for results.`);
+
+      navigate('/chats', {
+        state: {
+          uploadResult: data
+        }
+      });
       
     } catch (error) {
       console.error('Error uploading file:', error);

@@ -5,6 +5,7 @@ from routers import auth, inventory_router
 from database.connection import engine
 from database.base import Base
 from models import user, transaction, inventory
+from clean import demand_prediction, data
 
 app = FastAPI()
 
@@ -22,3 +23,5 @@ Base.metadata.create_all(bind=engine)
 
 app.include_router(auth.router,             prefix="/auth")
 app.include_router(inventory_router.router, prefix="/inventory")
+app.include_router(demand_prediction.router , prefix="/demand_prediction")
+app.include_router(data.router , prefix="/data")

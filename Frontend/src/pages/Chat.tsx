@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation  } from 'react-router-dom';
 
 interface Message {
   id: number;
@@ -14,7 +14,24 @@ interface ChatHistoryItem {
 }
 
 export default function ChatInterface() {
+
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+  const uploadData = location.state?.uploadResult;
+
+  if (uploadData) {
+      setMessages([
+        {
+          id: Date.now(),
+          role: 'assistant',
+          content: JSON.stringify(uploadData) // temporary
+        }
+      ]);
+    }
+  }, [location.state]);
+
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
@@ -163,6 +180,57 @@ export default function ChatInterface() {
     }
   };
 
+  const renderMessageContent = (content: string) => {
+    try {
+      const parsed = JSON.parse(content);
+
+      if (parsed.results) {
+        return (
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-blue-400">Inventory Analysis</h3>
+
+            {parsed.results.map((item: any, index: number) => (
+              <div
+                key={index}
+                className="bg-white/5 border border-white/10 rounded-xl p-4"
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-semibold text-white">{item.sku}</h4>
+                  <span className={`text-xs px-2 py-1 rounded ${
+                    item.reorder ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
+                  }`}>
+                    {item.reorder ? 'Reorder Needed' : 'OK'}
+                  </span>
+                </div>
+
+                <p className="text-sm text-gray-400 mb-2">
+                  Reorder Qty: {item.reorder_qty}
+                </p>
+
+                <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  {item.recommendations.map((rec: string, i: number) => (
+                    <li key={i}>{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+
+            {parsed.report && (
+              <div className="text-yellow-400 text-sm mt-2">
+                {parsed.report}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+    } catch {
+      // fallback to normal text
+    }
+
+    return <p className="whitespace-pre-wrap">{content}</p>;
+  };
+
   return (
     <div className="flex h-screen bg-[#070b14] text-white font-sans overflow-hidden">
       
@@ -266,7 +334,7 @@ export default function ChatInterface() {
                   </div>
                   <div className="bg-transparent text-gray-300 leading-relaxed max-w-[90%] md:max-w-[85%] space-y-4">
                     <div className="bg-white/5 border border-white/10 rounded-xl p-5 shadow-lg">
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      {renderMessageContent(msg.content)}
                     </div>
                   </div>
                 </div>

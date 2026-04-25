@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from fastapi import APIRouter
 
 # Assuming 'zai' is your custom SDK or wrapper. 
 # (Note: If you are using the official Zhipu AI SDK, it would be 'from zhipuai import ZhipuAI')
@@ -27,7 +28,8 @@ from models.user import User  # Ensure users table is registered in metadata.
 from models.transaction import Transaction
 
 # 1. Initialize App and Client
-app = FastAPI(title="Data Intelligence Layer")
+router = APIRouter() # title="Data Intelligence Layer"
+
 # Ensure required tables exist when this app runs standalone.
 Base.metadata.create_all(bind=engine)
 # Load the variables from the .env file into the system environment
@@ -214,7 +216,7 @@ def transform_transaction_data(raw_content: str, file_type: str, max_retries: in
     return None
 
 # 4. The API Endpoints
-@app.post("/api/v1/ingest-transaction")
+@router.post("/api/v1/ingest-transaction")
 async def ingest_transaction(request: RawDataRequest):
     """
     Endpoint to receive messy data, clean it via GLM, and store it.
@@ -243,7 +245,7 @@ async def ingest_transaction(request: RawDataRequest):
         "data": cleaned_data
     }
 
-@app.post("/api/v1/ingest-file")
+@router.post("/api/v1/ingest-file")
 async def ingest_file(file: UploadFile = File(...)):
     """
     Endpoint to upload an Excel or CSV file, read it, and send it to the AI engine.
